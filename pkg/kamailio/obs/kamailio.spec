@@ -322,7 +322,7 @@ Release:    %rel
 Packager:   Peter Dunkley <peter@dunkley.me.uk>
 License:    GPL-2.0
 Group:      %{PKGGROUP}
-Source:     http://kamailio.org/pub/kamailio/%{ver}/src/%{name}-%{ver}_src.tar.gz
+Source:     http://kamailio.org/pub/kamailio/%{ver}/src/%{name}-%{ver}.tar.bz2
 URL:        http://kamailio.org/
 Vendor:     kamailio.org
 BuildRoot:  %{_tmppath}/%{name}-%{ver}-buildroot
