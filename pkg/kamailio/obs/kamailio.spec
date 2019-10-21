@@ -1,12 +1,13 @@
 %define name    kamailio
 %define ver 5.3.0
-%define rel dev1.0%{dist}
+%define rel %{wavecom}.%{timestamp}.%{gitver}%{dist}
 
 %if 0%{?fedora} == 27
 %define dist_name fedora
 %define dist_version %{?fedora}
 %bcond_without cnxcc
 %bcond_with dnssec
+%bcond_without evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -32,6 +33,7 @@
 %define dist_version %{?fedora}
 %bcond_without cnxcc
 %bcond_with dnssec
+%bcond_without evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -57,6 +59,7 @@
 %define dist_version %{?fedora}
 %bcond_without cnxcc
 %bcond_with dnssec
+%bcond_without evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -82,6 +85,7 @@
 %define dist_version %{?fedora}
 %bcond_without cnxcc
 %bcond_with dnssec
+%bcond_without evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -107,6 +111,7 @@
 %define dist_version %{?fedora}
 %bcond_without cnxcc
 %bcond_with dnssec
+%bcond_without evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -132,6 +137,7 @@
 %define dist_version %{?fedora}
 %bcond_without cnxcc
 %bcond_with dnssec
+%bcond_without evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -157,11 +163,12 @@
 %define dist_version %{?centos}
 %bcond_with cnxcc
 %bcond_without dnssec
+%bcond_without evapi
 %bcond_without geoip
-%bcond_without http_async_client
+%bcond_with http_async_client
 %bcond_without ims
-%bcond_without jansson
-%bcond_without json
+%bcond_with jansson
+%bcond_with json
 %bcond_without lua
 %bcond_without kazoo
 %bcond_without memcached
@@ -184,6 +191,7 @@
 %bcond_without cnxcc
 %bcond_with dnssec
 %bcond_without geoip
+%bcond_without evapi
 %bcond_without http_async_client
 %bcond_without ims
 %bcond_without jansson
@@ -208,6 +216,7 @@
 %define dist_version %{?suse_version}
 %bcond_without cnxcc
 %bcond_with dnssec
+%bcond_without evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -233,6 +242,7 @@
 %define dist_version %{?rhel}
 %bcond_with cnxcc
 %bcond_without dnssec
+%bcond_without evapi
 %bcond_with geoip
 %bcond_with http_async_client
 %bcond_with ims
@@ -258,6 +268,7 @@
 %define dist_version %{?rhel}
 %bcond_with cnxcc
 %bcond_with dnssec
+%bcond_without evapi
 %bcond_with geoip
 %bcond_with http_async_client
 %bcond_with ims
@@ -342,7 +353,12 @@ BuildRequires:  bison, flex
 Requires:  filesystem
 BuildRequires:  systemd-mini, shadow
 %endif
-
+%if 0%{?fedora} == 27
+BuildRequires:  python3-devel
+%endif
+%if 0%{?fedora} == 28
+BuildRequires:  python3-devel
+%endif
 
 %description
 Kamailio (former OpenSER) is an Open Source SIP Server released under GPL, able
@@ -517,6 +533,16 @@ BuildRequires:  dnssec-tools-libs-devel
 DNSSEC support for Kamailio.
 %endif
 
+%if %{with evapi}
+%package    ev
+Summary:    High-performance event loop/event model with lots of features
+Group:      %{PKGGROUP}
+Requires:   libev, kamailio = %ver
+BuildRequires:  libev-devel
+
+%description    ev
+High-performance event loop/event model with lots of features for Kamailio.
+%endif
 
 %if %{with geoip}
 %package    geoip
@@ -1186,6 +1212,9 @@ make every-module skip_modules="app_mono db_cassandra db_oracle iptrtpproxy \
 %if %{with dnssec}
     kdnssec \
 %endif
+%if %{with evapi}
+    kev \
+%endif
 %if %{with geoip}
     kgeoip \
 %endif
@@ -1269,6 +1298,9 @@ make install-modules-all skip_modules="app_mono db_cassandra db_oracle \
     kcpl \
 %if %{with dnssec}
     kdnssec \
+%endif
+%if %{with evapi}
+    kev \
 %endif
 %if %{with geoip}
     kgeoip \
@@ -1808,6 +1840,12 @@ fi
 %{_libdir}/kamailio/modules/dnssec.so
 %endif
 
+%if %{with evapi}
+%files      ev
+%defattr(-,root,root)
+%doc %{_docdir}/kamailio/modules/README.evapi
+%{_libdir}/kamailio/modules/evapi.so
+%endif
 
 %if %{with geoip}
 %files      geoip

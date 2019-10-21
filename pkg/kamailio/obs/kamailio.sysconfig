@@ -2,11 +2,16 @@
 # Kamailio startup options
 #
 
-# Amount of shared memory to allocate for the running Kamailio server (in Mb)
-#SHM_MEMORY=64
+# Options to pass when starting Kamailio
+# Note: variable interpolation is not supported by systemd so $OPTIONS cannot
+#       be constructed from multiple variables.
+# -m - Kamailio shared (global) memory (default 32 MB)
+# -M - Kamailio package (per-process private) memory (default 4 MB)
+# -u - User to run Kamailio as
+# -g - Group to run Kamailio as
 
-# Amount of per-process (package) memory to allocate for Kamailio (in Mb)
-#PKG_MEMORY=4
+CFGFILE="/opt/kamailio/router/router.cfg"
+OPTIONS="-m 1024 -M 128 -u kamailio -g kamailio"
 
 # Enable the server to leave a core file when it crashes.
 # Set this to 'yes' to enable kamailio to leave a core file when it crashes
@@ -15,4 +20,4 @@
 # On some systems (e.g. Ubuntu 6.10, Debian 4.0) it is necessary to specify
 # a directory for the core files to get a dump. Look into the kamailio
 # init file for an example configuration.
-DUMP_CORE=no
+DUMP_CORE=yes
