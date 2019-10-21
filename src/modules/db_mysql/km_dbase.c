@@ -35,7 +35,6 @@
 #include <string.h>
 #include <mysql.h>
 #include <errmsg.h>
-#include <mysql_version.h>
 #include "../../core/mem/mem.h"
 #include "../../core/dprint.h"
 #include "../../core/async_task.h"
@@ -90,16 +89,12 @@ static int db_mysql_submit_query(const db1_con_t* _h, const str* _s)
 			}
 		}
 		/*
-		 * We're doing later a query anyway that will reset the timout of the server,
+		 * We're doing later a query anyway that will reset the timeout of the server,
 		 * so it makes sense to set the timestamp value to the actual time in order
 		 * to prevent unnecessary pings.
 		 */
 		CON_TIMESTAMP(_h) = t;
 	}
-
-	/* screws up the terminal when the query contains a BLOB :-( (by bogdan)
-	 * LM_DBG("submit_query(): %.*s\n", _s->len, _s->s);
-	 */
 
 	/* When a server connection is lost and a query is attempted, most of
 	 * the time the query will return a CR_SERVER_LOST, then at the second
@@ -171,7 +166,7 @@ int db_mysql_submit_query_async(const db1_con_t* _h, const str* _s)
 	asize = sizeof(async_task_t) + 2*sizeof(str) + di->url.len + _s->len + 2;
 	atask = shm_malloc(asize);
 	if(atask==NULL) {
-		LM_ERR("no more shared memory to allocate %d\n", asize);
+		SHM_MEM_ERROR_FMT("size %d\n", asize);
 		return -1;
 	}
 
@@ -371,7 +366,7 @@ int db_mysql_fetch_result(const db1_con_t* _h, db1_res_t** _r, const int nrows)
 		/* Allocate a new result structure */
 		*_r = db_mysql_new_result();
 		if (*_r == 0) {
-			LM_ERR("no memory left\n");
+			LM_ERR("could not allocate new result\n");
 			return -2;
 		}
 
@@ -431,7 +426,7 @@ int db_mysql_fetch_result(const db1_con_t* _h, db1_res_t** _r, const int nrows)
 
 	RES_ROWS(*_r) = (struct db_row*)pkg_malloc(sizeof(db_row_t) * rows);
 	if (!RES_ROWS(*_r)) {
-		LM_ERR("no memory left\n");
+		PKG_MEM_ERROR;
 		return -5;
 	}
 
@@ -626,7 +621,7 @@ int db_mysql_start_transaction(db1_con_t* _h, db_locking_t _l)
 	case DB_LOCKING_WRITE:
 		if ((lock_str.s = pkg_malloc((lock_start_str.len + CON_TABLE(_h)->len + lock_end_str.len) * sizeof(char))) == NULL)
 		{
-			LM_ERR("allocating pkg memory\n");
+			PKG_MEM_ERROR;
 			goto error;
 		}
 
@@ -897,8 +892,10 @@ int db_mysql_alloc_buffer(void)
 	}
 
 	mysql_sql_buf = (char*)malloc(sql_buffer_size);
-	if (mysql_sql_buf == NULL)
+	if (mysql_sql_buf == NULL) {
+		SYS_MEM_ERROR;
 		return -1;
-	else
+	} else {
 		return 0;
+	}
 }

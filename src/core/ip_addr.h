@@ -167,6 +167,7 @@ typedef struct sr_net_info {
 	dest_info_t* dst;
 } sr_net_info_t;
 
+sr_net_info_t *ksr_evrt_rcvnetinfo_get(void);
 
 #define SND_FLAGS_INIT(sflags) \
 	do{ \
@@ -420,6 +421,7 @@ static inline void su2ip_addr(struct ip_addr* ip, union sockaddr_union* su)
 			break;
 		default:
 			LM_CRIT("unknown address family %d\n", su->s.sa_family);
+			memset(ip, 0, sizeof(ip_addr_t));
 	}
 }
 

@@ -301,9 +301,10 @@ modparam("dispatcher", "force_dst", 1)
  		The name of the XAVP which will hold the list with addresses and
 		associated properties, in the order they have been selected by the
 		chosen algorithm. If use_default is 1, the values of last XAVP correspond
-		to the last address in destination set. The first XAVP is the current
-		selected destination. All the other addresses from the destination set
-		will be added in the XAVP list to be able to implement serial forking.
+		to the last address in destination set. In case of using dispatcher.list file,
+		you have to set the priority field for each destination to ensure a particular order there.
+		The first XAVP is the current selected destination. All the other addresses
+		from the destination set will be added in the XAVP list to be able to implement serial forking.
  		</para>
 		<note>
  		<para>
@@ -631,12 +632,16 @@ modparam("dispatcher", "force_dst", 1)
 		<itemizedlist>
 		<listitem>
 			<para>Value 0: If set to 0, only the gateways with state PROBING are tested.
-            After a gateway is probed, the PROBING state is cleared in this mode.</para>
+            After a gateway is probed, the PROBING state is cleared in this mode.
+			This means that no probing will be executed at all only if flag in config file is set to 8/PROBING
+			(please check destination list file syntaxis for more details), it will probe only one time at startup or 
+			after dispatcher reload.</para>
 		</listitem>
 		<listitem>
 			<para>Value 1: If set to 1, all gateways are tested.  If set to 1 and
 			there is a failure of keepalive to an active gateway, then it is
-			set to TRYING state.</para>
+			set to TRYING state. This means that probing will be executed all the time,
+			but you can skip some servers with flag 4 in destination list file, for example.</para>
 		</listitem>
 		<listitem>
 			<para>Value 2: if set to 2, only gateways in inactive state with
@@ -982,6 +987,54 @@ modparam("dispatcher", "ds_db_extra_attrs", "socket=socket;pref=prefix")
 		</example>
 	</section>
 
+ 	<section id="dispatcher.p.ds_load_mode">
+ 		<title><varname>ds_load_mode</varname> (int)</title>
+ 		<para>
+		If set to 1, the module throws error when failing to add a destination
+		address (e.g., invalid URI). If set to 0, it skips the failing address
+		and continues with the next ones.
+ 		</para>
+ 		<para>
+ 		<emphasis>
+ 			Default value is <quote>0</quote>.
+ 		</emphasis>
+ 		</para>
+ 		<example>
+ 		<title>Set the <quote>ds_load_mode</quote> parameter</title>
+ <programlisting format="linespecific">
+ ...
+ modparam("dispatcher", "ds_load_mode", 1)
+ ...
+ </programlisting>
+ 		</example>
+	</section>
+
+	<section id="dispatcher.p.reload_delta">
+		<title><varname>reload_delta</varname> (int)</title>
+		<para>
+		The number of seconds that have to be waited before executing a new reload
+		of dispatcher records. By default there is a rate limiting of maximum
+		one reload in five seconds.
+		</para>
+		<para>
+		If set to 0, no rate limit is configured. Note carefully: use this
+		configuration only in tests environments because executing many RPC
+		reload commands at the same time can cause unexpected behavior.
+		</para>
+		<para>
+		<emphasis>
+			Default value is <quote>5</quote>.
+		</emphasis>
+		</para>
+		<example>
+		<title>Set <varname>reload_delta</varname> parameter</title>
+		<programlisting format="linespecific">
+...
+modparam("dispatcher", "reload_delta", 1)
+...
+		</programlisting>
+		</example>
+	</section>
 	</section>
 
 	<section>
@@ -1304,7 +1357,7 @@ if(ds_select("1", "$var(a)")) {
 			the address in destination URI; '1', 'r' or 'R' to push the address
 			in R-URI; '2', 'x' or 'X' to push the address only in the XAVP when
 			failure rerouting is enabled. Note that only first character of the
-			parameter matters, therefore once case use a more meaningful value
+			parameter matters, therefore one can use a more meaningful value
 			such as 'ruri' instead of 'r'. The parameter can contain pseudo
 			variables.
 			</para>
@@ -1701,8 +1754,23 @@ onreply_route {
 		</para>
         <programlisting  format="linespecific">
 		&sercmd; dispatcher.list
-		</programlisting>
-    </section>
+ ...
+DEST: {
+        URI: sip:192.168.0.1:5060
+        FLAGS: AP
+        PRIORITY: 12
+}
+ ...
+</programlisting>
+		<para>FLAGS consist out of 2 letters. First letter describe status of
+		destination: A-active, I – inactive, T – trying, D – disabled. Second
+		letter might be P or X. P is for probing, so AP means destination
+		is active and it is tested by SIP options continuously. X means that
+		there are no probing or sip pinging. So AX means that destination is
+		assumed as active and it is not tested by SIP options. DX
+		respectively is disabled destination that is not tested, etc.
+		</para>
+	</section>
 	<section id="dispatcher.r.reload">
 		<title>
 		<function moreinfo="none">dispatcher.reload</function>
@@ -1759,6 +1827,71 @@ onreply_route {
 ...
 </programlisting>
     </section>
+		<section id="dispatcher.r.add">
+		<title>
+		<function moreinfo="none">dispatcher.add</function>
+		</title>
+		<para>
+		Add a destination address to the in-memory dispatcher list. Reloading the dispatcher will remove
+		any destinations that are only added to the in-memory dispatcher list.
+		</para>
+		<para>
+		Name: <emphasis>dispatcher.add</emphasis>
+		</para>
+		<para>Parameters:</para>
+		<itemizedlist>
+			<listitem><para>_group_: destination group id</para></listitem>
+
+			<listitem><para>_address_: address of the destination in the _group_</para></listitem>
+
+			<listitem><para>_flags_ (optional): as described in the list file format,
+			default 0</para></listitem>
+
+		</itemizedlist>
+		<para>
+		Example:
+		</para>
+<programlisting  format="linespecific">
+...
+# prototype: &sercmd; dispatcher.add _group_ _address_ _flags_
+&sercmd; dispatcher.add 2 sip:127.0.0.1:5080
+&sercmd; dispatcher.add 3 sip:127.0.0.1:5075 8
+...
+</programlisting>
+    </section>
+		<section id="dispatcher.r.remove">
+		<title>
+		<function moreinfo="none">dispatcher.remove</function>
+		</title>
+		<para>
+		Remove a destination address from the in-memory dispatcher list. Reloading
+		the dispatcher from file or database will re-add destinations that are
+		removed using this command.
+		</para>
+		<para>
+		This command will remove all entries that match the group and address.
+		</para>
+		<para>
+		Name: <emphasis>dispatcher.remove</emphasis>
+		</para>
+		<para>Parameters:</para>
+		<itemizedlist>
+			<listitem><para>_group_: destination group id</para></listitem>
+
+			<listitem><para>_address_: address of the destination in the _group_</para></listitem>
+
+		</itemizedlist>
+		<para>
+		Example:
+		</para>
+<programlisting  format="linespecific">
+...
+# prototype: &sercmd; dispatcher.remove _group_ _address_
+&sercmd; dispatcher.remove 2 sip:127.0.0.1:5080
+&sercmd; dispatcher.remove 3 sip:127.0.0.1:5075;transport=udp
+...
+</programlisting>
+    </section>
 
    </section>
 
@@ -1776,12 +1909,27 @@ onreply_route {
 		</para>
 		<itemizedlist>
 			<listitem>
-			<para>flags (listed by index - can be bitwise mask of values):
-			0 (value 1) - inactive destination; 1 (value 2) - temporary trying
-			destination (in the way to become inactive if it does not reply to
-			keepalives - there is a module parameter to set the threshold of
-			failures); 2 (value 4)  - admin disabled destination; 3 (value 8)
-			- probing destination (sending keep alives);</para>
+			<para>flags - control the mode of using the destination address and
+			sending keepalives. It is a bitwise value that can be built using
+			the following flags:
+			<itemizedlist>
+				<listitem><para>1 (bit at index 0 - 1 &lt;&lt;0) - inactive destination</para>
+				</listitem>
+				<listitem><para>2 (bit at index 1 - 1 &lt;&lt;1) - temporary trying
+				destination (in the way to become inactive if it does not reply to
+				keepalives - there is a module parameter to set the threshold of
+				failures)</para>
+				</listitem>
+				<listitem><para>4 (bit at index 2 - 1 &lt;&lt;2) - admin disabled destination</para>
+				</listitem>
+				<listitem><para>8 (bit at index 3 - 1 &lt;&lt;3) - probing destination (sending keep alives);</para>
+				</listitem>
+				<listitem><para>16 (bit at index 4 - 1 &lt;&lt;4) - skip DNS A/AAAA resolve at startup,
+				useful when the hostname of the destination address is a NAPTR or SRV record only.
+				Such addresses cannot be matched anymore with ds_is_from_list(...).</para>
+				</listitem>
+			</itemizedlist>
+			</para>
 			</listitem>
 			<listitem>
 			<para>priority: sets the priority in destination list (based on it

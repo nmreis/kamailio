@@ -623,6 +623,12 @@ static int m_sleep(struct sip_msg *msg, char *time, char *str2)
 	return 1;
 }
 
+static int ki_sleep(sip_msg_t* msg, int v)
+{
+	sleep((unsigned int)v);
+	return 1;
+}
+
 static int m_usleep(struct sip_msg *msg, char *time, char *str2)
 {
 	int s;
@@ -632,6 +638,12 @@ static int m_usleep(struct sip_msg *msg, char *time, char *str2)
 		return -1;
 	}
 	sleep_us((unsigned int)s);
+	return 1;
+}
+
+static int ki_usleep(sip_msg_t* msg, int v)
+{
+	sleep_us((unsigned int)v);
 	return 1;
 }
 
@@ -702,7 +714,8 @@ static int cfg_lock_helper(str *lkey, int mode)
 	unsigned int pos;
 
 	if(_cfg_lock_set==NULL) {
-		LM_ERR("lock set not initialized (attempt to do op: %d on: %.*s)\n",
+		LM_ERR("lock set not initialized (attempt to do op: %d on: %.*s) -"
+				" see param lock_set_size\n",
 				mode, lkey->len, lkey->s);
 		return -1;
 	}
@@ -897,6 +910,7 @@ static void mod_destroy(void)
 	{
 		lock_set_destroy(_cfg_lock_set);
 		lock_set_dealloc(_cfg_lock_set);
+		_cfg_lock_set = NULL;
 	}
 }
 
@@ -1051,6 +1065,16 @@ static sr_kemi_t sr_kemi_cfgutils_exports[] = {
 	{ str_init("cfgutils"), str_init("core_hash"),
 		SR_KEMIP_INT, ki_core_hash,
 		{ SR_KEMIP_STR, SR_KEMIP_STR, SR_KEMIP_INT,
+			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }
+	},
+	{ str_init("cfgutils"), str_init("sleep"),
+		SR_KEMIP_INT, ki_sleep,
+		{ SR_KEMIP_INT, SR_KEMIP_NONE, SR_KEMIP_NONE,
+			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }
+	},
+	{ str_init("cfgutils"), str_init("usleep"),
+		SR_KEMIP_INT, ki_usleep,
+		{ SR_KEMIP_INT, SR_KEMIP_NONE, SR_KEMIP_NONE,
 			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }
 	},
 

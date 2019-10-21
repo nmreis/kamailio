@@ -123,7 +123,7 @@
 
 	<section>
 		<title>Parameters</title>
-		<section>
+		<section id="uac_redirect.p.default_filter">
 			<title><varname>default_filter</varname> (string)</title>
 			<para>
 			The default behavior in filtering contacts. It may be 
@@ -144,7 +144,7 @@ modparam("uac_redirect","default_filter","deny")
 				</programlisting>
 			</example>
 		</section>
-		<section>
+		<section id="uac_redirect.p.deny_filter">
 			<title><varname>deny_filter</varname> (string)</title>
 			<para>
 			The regular expression for default deny filtering. It makes sense
@@ -176,7 +176,7 @@ modparam("uac_redirect","deny_filter",".*@siphub\.net")
 				</programlisting>
 			</example>
 		</section>
-		<section>
+		<section id="uac_redirect.p.accept_filter">
 			<title><varname>accept_filter</varname> (string)</title>
 			<para>
 			The regular expression for default accept filtering. It makes sense
@@ -208,7 +208,7 @@ modparam("uac_redirect","accept_filter",".*@siphub\.net")
 				</programlisting>
 			</example>
 		</section>
-		<section>
+		<section id="uac_redirect.p.acc_function">
 			<title><varname>acc_function</varname> (string)</title>
 			<para>
 			Specifies the accounting function to be used. Just by defining 
@@ -248,7 +248,7 @@ modparam("uac_redirect","acc_function","acc_db_request")
 				</programlisting>
 			</example>
 		</section>
-		<section>
+		<section id="uac_redirect.p.acc_db_table">
 			<title><varname>acc_db_table</varname> (string)</title>
 			<para>
 			Specifies the accounting table to be used if DB accounting was 
@@ -273,7 +273,7 @@ modparam("uac_redirect","acc_db_table","acc_redirect")
 				</programlisting>
 			</example>
 		</section>
-		<section>
+		<section id="uac_redirect.p.bflags">
 			<title><varname>bflags</varname> (int)</title>
 			<para>
 			This parameter defines the branch-flags to be set for new, added branch.
@@ -302,11 +302,49 @@ branch_route[1] {
 				</programlisting>
 			</example>
 		</section>
+		<section>
+			<title><varname>flags_hdr_mode</varname> (int)</title>
+			<para>
+			Specifies if and how a Contact&apos;s flags header parameter
+			must be used. If set, and a flags header parameter is set,
+			its value will be set as branch flags for that contact.
+			</para>
+			<para>
+			Its values may be:
+			</para>
+			<itemizedlist>
+				<listitem>
+				<para><emphasis>0</emphasis> - ignore flags header parameter,
+				just use bflags module parameter</para>
+				</listitem>
+				<listitem>
+				<para><emphasis>1</emphasis> - use flags header parameter if
+				present, ignore bflags module parameter</para>
+				</listitem>
+				<listitem>
+				<para><emphasis>2</emphasis> - use flags header parameter if
+				present and merge (binary or) it with the bflags module
+				parameter</para>
+				</listitem>
+			</itemizedlist>
+			<para>
+				<emphasis>
+					The default value is <quote>0</quote>.
+				</emphasis>
+			</para>
+			<example>
+				<title>Set <varname>flags_hdr_mode</varname> parameter</title>
+				<programlisting format="linespecific">
+...
+modparam("uac_redirect","flags_hdr_mode",2)
+...
+				</programlisting>
+			</example>
+		</section>
 	</section>
-
 	<section>
 		<title>Functions</title>
-		<section>
+		<section id="uac_redirect.f.set_deny_filter">
 			<title>
 				<function moreinfo="none">set_deny_filter(filter,flags)
 					</function>
@@ -356,7 +394,7 @@ set_deny_filter(".*@domain1.net","");
 			</example>
 		</section>
 
-		<section>
+		<section id="uac_redirect.f.set_accept_filter">
 			<title>
 				<function moreinfo="none">set_accept_filter(filter,flags)
 					</function>
@@ -406,7 +444,7 @@ set_accept_filter(".*@domain1.net","");
 			</example>
 		</section>
 
-		<section>
+		<section id="uac_redirect.f.get_redirects1">
 			<title>
 				<function moreinfo="none">get_redirects(max)</function>
 			</title>
@@ -465,7 +503,7 @@ get_redirects("*");
 			</example>
 		</section>
 
-		<section>
+		<section id="uac_redirect.f.get_redirects2">
 			<title>
 				<function moreinfo="none">get_redirects(max,reason)</function>
 			</title>
@@ -555,8 +593,6 @@ failure_route[REDIRECT_ACC] {
 			</example>
 
 	</section>
-
-
 
 </chapter>
 

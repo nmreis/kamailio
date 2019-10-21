@@ -304,6 +304,12 @@ int tps_prepare_msg(sip_msg_t *msg)
 		return 3;
 	}
 
+	if(msg->via1==NULL || msg->callid==NULL) {
+		LM_ERR("mandatory headers missing - via1: %p callid: %p\n",
+				msg->via1, msg->callid);
+		return 4;
+	}
+
 	return 0;
 }
 
@@ -384,6 +390,7 @@ int tps_msg_sent(sr_event_param_t *evp)
 	str *obuf;
 	int dialog;
 	int local;
+	str nbuf = STR_NULL;
 
 	obuf = (str*)evp->data;
 
@@ -437,7 +444,15 @@ int tps_msg_sent(sr_event_param_t *evp)
 		tps_response_sent(&msg);
 	}
 
-	obuf->s = tps_msg_update(&msg, (unsigned int*)&obuf->len);
+	nbuf.s = tps_msg_update(&msg, (unsigned int*)&nbuf.len);
+	if(nbuf.s!=NULL) {
+		LM_DBG("new outbound buffer generated\n");
+		pkg_free(obuf->s);
+		obuf->s = nbuf.s;
+		obuf->len = nbuf.len;
+	} else {
+		LM_ERR("failed to generate new outbound buffer\n");
+	}
 
 done:
 	free_sip_msg(&msg);
@@ -515,7 +530,7 @@ static int tps_execute_event_route(sip_msg_t *msg, sr_event_param_t *evp,
 		run_top_route(event_rt.rlist[evidx], (msg)?msg:fmsg, &ctx);
 	} else {
 		if(keng!=NULL) {
-			if(keng->froute((msg)?msg:fmsg, EVENT_ROUTE,
+			if(sr_kemi_ctx_route(keng, &ctx, (msg)?msg:fmsg, EVENT_ROUTE,
 						&_tps_eventrt_callback, evname)<0) {
 				LM_ERR("error running event route kemi callback\n");
 				p_onsend=NULL;

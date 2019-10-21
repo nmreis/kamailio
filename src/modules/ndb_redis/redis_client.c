@@ -758,7 +758,7 @@ int check_cluster_reply(redisReply *reply, redisc_server_t **rsrv)
 	char spec_new[100];
 
 	if(redis_cluster_param) {
-		LM_DBG("Redis replied: \"%.*s\"\n", reply->len, reply->str);
+		LM_DBG("Redis replied: \"%.*s\"\n", (int)reply->len, reply->str);
 		if((reply->len > 7) && (strncmp(reply->str, "MOVED", 5) == 0)) {
 			port = 6379;
 			if(strchr(reply->str, ':') > 0) {
@@ -769,7 +769,7 @@ int check_cluster_reply(redisReply *reply, redisc_server_t **rsrv)
 				LM_DBG("Port \"%.*s\" [%i] => %i\n", tmpstr.len, tmpstr.s,
 						tmpstr.len, port);
 			} else {
-				LM_ERR("No Port in REDIS MOVED Reply (%.*s)\n", reply->len,
+				LM_ERR("No Port in REDIS MOVED Reply (%.*s)\n", (int)reply->len,
 						reply->str);
 				return 0;
 			}
@@ -778,7 +778,7 @@ int check_cluster_reply(redisReply *reply, redisc_server_t **rsrv)
 				addr.s = strchr(reply->str + 6, ' ') + 1;
 				LM_DBG("Host \"%.*s\" [%i]\n", addr.len, addr.s, addr.len);
 			} else {
-				LM_ERR("No Host in REDIS MOVED Reply (%.*s)\n", reply->len,
+				LM_ERR("No Host in REDIS MOVED Reply (%.*s)\n", (int)reply->len,
 						reply->str);
 				return 0;
 			}
@@ -1019,12 +1019,12 @@ error:
 
 /**
  * Executes a redis command.
- * Command is coded using a vector of strings, and a vector of lenghts.
+ * Command is coded using a vector of strings, and a vector of lengths.
  *
  * @param rsrv Pointer to a redis_server_t structure.
  * @param argc number of elements in the command vector.
  * @param argv vector of zero terminated strings forming the command.
- * @param argvlen vector of command string lenghts or NULL.
+ * @param argvlen vector of command string lengths or NULL.
  * @return redisReply structure or NULL if there was an error.
  */
 redisReply* redisc_exec_argv(redisc_server_t *rsrv, int argc, const char **argv,

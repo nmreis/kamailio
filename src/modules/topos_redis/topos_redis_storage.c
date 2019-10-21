@@ -279,7 +279,7 @@ int tps_redis_insert_dialog(tps_data_t *td)
 		}
 		return -1;
 	}
-	LM_DBG("expire set on dialog record for [%.*s] with argc %d\n",
+	LM_DBG("expire %lu set on dialog record for [%.*s] with argc %d\n", lval,
 			rkey.len, rkey.s, argc);
 	freeReplyObject(rrpl);
 
@@ -360,7 +360,7 @@ int tps_redis_insert_invite_branch(tps_data_t *td)
 		}
 		return -1;
 	}
-	LM_DBG("inserting branch record for [%.*s] with argc %d\n",
+	LM_DBG("inserting invite branch record for [%.*s] with argc %d\n",
 			rkey.len, rkey.s, argc);
 
 	freeReplyObject(rrpl);
@@ -390,7 +390,7 @@ int tps_redis_insert_invite_branch(tps_data_t *td)
 		}
 		return -1;
 	}
-	LM_DBG("expire set on branch record for [%.*s] with argc %d\n",
+	LM_DBG("expire %lu set on branch record for [%.*s] with argc %d\n", lval,
 			rkey.len, rkey.s, argc);
 	freeReplyObject(rrpl);
 
@@ -518,7 +518,7 @@ int tps_redis_insert_branch(tps_data_t *td)
 		}
 		return -1;
 	}
-	LM_DBG("expire set on branch record for [%.*s] with argc %d\n",
+	LM_DBG("expire %lu set on branch record for [%.*s] with argc %d\n", lval,
 			rkey.len, rkey.s, argc);
 	freeReplyObject(rrpl);
 
@@ -570,7 +570,7 @@ int tps_redis_load_invite_branch(sip_msg_t *msg, tps_data_t *md, tps_data_t *sd)
 		return -1;
 
 	if(md->a_callid.len<=0 || md->b_tag.len<=0) {
-		LM_INFO("no call-id or to-rag for this message\n");
+		LM_INFO("no call-id or to-tag for this message\n");
 		return -1;
 	}
 
@@ -607,7 +607,7 @@ int tps_redis_load_invite_branch(sip_msg_t *msg, tps_data_t *md, tps_data_t *sd)
 	argvlen[argc] = rkey.len;
 	argc++;
 
-	LM_DBG("loading branch record for [%.*s]\n", rkey.len, rkey.s);
+	LM_DBG("loading invite branch record for [%.*s]\n", rkey.len, rkey.s);
 
 	rrpl = _tps_redis_api.exec_argv(rsrv, argc, (const char **)argv, argvlen);
 	if(rrpl==NULL) {
@@ -654,7 +654,7 @@ int tps_redis_load_invite_branch(sip_msg_t *msg, tps_data_t *md, tps_data_t *sd)
 		sval.s = NULL;
 		switch(rrpl->element[i]->type) {
 			case REDIS_REPLY_STRING:
-				LM_DBG("r[%d]: s[%.*s]\n", i, rrpl->element[i]->len,
+				LM_DBG("r[%d]: s[%.*s]\n", i, (int)rrpl->element[i]->len,
 						rrpl->element[i]->str);
 				sval.s = rrpl->element[i]->str;
 				sval.len = rrpl->element[i]->len;
@@ -727,6 +727,7 @@ int tps_redis_load_branch(sip_msg_t *msg, tps_data_t *md, tps_data_t *sd,
 	memset(argv, 0, TPS_REDIS_NR_KEYS * sizeof(char*));
 	memset(argvlen, 0, TPS_REDIS_NR_KEYS * sizeof(size_t));
 	argc = 0;
+	memset(&id, 0, sizeof(tps_data_t));
 
 	if(mode==0) {
 		/* load same transaction using Via branch */
@@ -738,6 +739,10 @@ int tps_redis_load_branch(sip_msg_t *msg, tps_data_t *md, tps_data_t *sd,
 			return -1;
 		}
 		xvbranch1 = &id.x_vbranch1;
+	}
+	if(xvbranch1->len<=0 || xvbranch1->s==NULL) {
+		LM_DBG("branch value not found (mode: %u)\n", mode);
+		return 1;
 	}
 	rp = _tps_redis_cbuf;
 	memcpy(rp, _tps_redis_bprefix.s, _tps_redis_bprefix.len);
@@ -802,7 +807,7 @@ int tps_redis_load_branch(sip_msg_t *msg, tps_data_t *md, tps_data_t *sd,
 		sval.s = NULL;
 		switch(rrpl->element[i]->type) {
 			case REDIS_REPLY_STRING:
-				LM_DBG("r[%d]: s[%.*s]\n", i, rrpl->element[i]->len,
+				LM_DBG("r[%d]: s[%.*s]\n", i, (int)rrpl->element[i]->len,
 						rrpl->element[i]->str);
 				sval.s = rrpl->element[i]->str;
 				sval.len = rrpl->element[i]->len;
@@ -1005,7 +1010,7 @@ int tps_redis_load_dialog(sip_msg_t *msg, tps_data_t *md, tps_data_t *sd)
 		sval.s = NULL;
 		switch(rrpl->element[i]->type) {
 			case REDIS_REPLY_STRING:
-				LM_DBG("r[%d]: s[%.*s]\n", i, rrpl->element[i]->len,
+				LM_DBG("r[%d]: s[%.*s]\n", i, (int)rrpl->element[i]->len,
 						rrpl->element[i]->str);
 				sval.s = rrpl->element[i]->str;
 				sval.len = rrpl->element[i]->len;
@@ -1413,7 +1418,7 @@ int tps_redis_end_dialog(sip_msg_t *msg, tps_data_t *md, tps_data_t *sd)
 		}
 		return -1;
 	}
-	LM_DBG("expire set on branch record for [%.*s] with argc %d\n",
+	LM_DBG("expire %lu set on dialog record for [%.*s] with argc %d\n", lval,
 			rkey.len, rkey.s, argc);
 	freeReplyObject(rrpl);
 

@@ -177,7 +177,11 @@ static int child_init(int rank)
 		return 0;
 	}
 	_apy_process_rank = rank;
+#if PY_VERSION_HEX >= 0x03070000
+	PyOS_AfterFork_Child();
+#else
 	PyOS_AfterFork();
+#endif
 	if (cfg_child_init()) {
 		return -1;
 	}
@@ -431,7 +435,11 @@ int apy_init_script(int rank)
 {
 	PyObject *pFunc, *pArgs, *pValue, *pResult;
 	int rval = -1;
+#if PY_VERSION_HEX >= 0x03070000
+	const char *classname;
+#else
 	char *classname;
+#endif
 	PyGILState_STATE gstate;
 
 
@@ -569,6 +577,11 @@ static int ki_app_python_exec_p1(sip_msg_t *msg, str *method, str *p1)
 /* clang-format off */
 static sr_kemi_t sr_kemi_app_python_exports[] = {
 	{ str_init("app_python3"), str_init("exec"),
+		SR_KEMIP_INT, ki_app_python_exec,
+		{ SR_KEMIP_STR, SR_KEMIP_NONE, SR_KEMIP_NONE,
+			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }
+	},
+	{ str_init("app_python3"), str_init("execx"),
 		SR_KEMIP_INT, ki_app_python_exec,
 		{ SR_KEMIP_STR, SR_KEMIP_NONE, SR_KEMIP_NONE,
 			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }

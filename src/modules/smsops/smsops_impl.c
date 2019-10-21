@@ -469,7 +469,7 @@ int decode_3gpp_sms(struct sip_msg *msg) {
 		if (!rp_data) {
 			rp_data = (sms_rp_data_t*)pkg_malloc(sizeof(struct _sms_rp_data));
 			if (!rp_data) {
-				LM_ERR("Error allocating %lu bytes!\n", sizeof(struct _sms_rp_data));
+				LM_ERR("Error allocating %lu bytes!\n", (unsigned long)sizeof(struct _sms_rp_data));
 				return -1;
 			}
 		} else {
@@ -564,9 +564,9 @@ int decode_3gpp_sms(struct sip_msg *msg) {
 
 							// Check for malicious length, which might cause buffer overflow
 							if(udh_read + ie->data.len + 2 /* two octets are read so far */ > udh_len) {
-								pkg_free(ie);
 								LM_ERR("IE Lenght for IE id %d is bigger than the remaining User-Data element!\n",
 																									ie->identifier);
+								pkg_free(ie);
 								return -1;
 							}
 
@@ -846,7 +846,7 @@ int pv_set_sms(struct sip_msg* msg, pv_param_t *param, int op, pv_value_t *val) 
 	if (!rp_send_data) {
 		rp_send_data = (sms_rp_data_t*)pkg_malloc(sizeof(struct _sms_rp_data));
 		if (!rp_send_data) {
-			LM_ERR("Error allocating %lu bytes!\n", sizeof(struct _sms_rp_data));
+			LM_ERR("Error allocating %lu bytes!\n", (unsigned long)sizeof(struct _sms_rp_data));
 			return -1;
 		}
 		// Initialize structure:

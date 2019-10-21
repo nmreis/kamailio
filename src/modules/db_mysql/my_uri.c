@@ -69,6 +69,7 @@ static int dupl_string(char** dst, const char* begin, const char* end)
 
 	*dst = pkg_malloc(end - begin + 1);
 	if ((*dst) == NULL) {
+		PKG_MEM_ERROR;
 		return -1;
 	}
 
@@ -95,12 +96,13 @@ static int parse_mysql_uri(struct my_uri* res, str* uri)
 		ST_USER_HOST,  /* Username or hostname */
 		ST_PASS_PORT,  /* Password or port part */
 		ST_HOST,       /* Hostname part */
+		ST_HOST6,      /* Hostname part IPv6 */
 		ST_PORT,       /* Port part */
 		ST_DB          /* Database part */
 	};
 
 	enum state st;
-	int  i;
+	int  i, ipv6_flag=0;
 	const char* begin;
 	char* prev_token;
 
@@ -156,6 +158,11 @@ static int parse_mysql_uri(struct my_uri* res, str* uri)
 				begin = uri->s + i + 1;
 				break;
 
+			case '[':
+				st = ST_HOST6;
+				begin = uri->s + i + 1;
+				break;
+
 			case '/':
 				if (dupl_string(&res->host, begin, uri->s + i) < 0) goto err;
 				if (dupl_string(&res->database, uri->s + i + 1, uri->s + uri->len) < 0) goto err;
@@ -184,16 +191,30 @@ static int parse_mysql_uri(struct my_uri* res, str* uri)
 
 		case ST_HOST:
 			switch(uri->s[i]) {
+			case '[':
+				st = ST_HOST6;
+				begin = uri->s + i + 1;
+				break;
+
 			case ':':
 				st = ST_PORT;
-				if (dupl_string(&res->host, begin, uri->s + i) < 0) goto err;
+				if (dupl_string(&res->host, begin, uri->s + i - ipv6_flag) < 0) goto err;
 				begin = uri->s + i + 1;
 				break;
 
 			case '/':
-				if (dupl_string(&res->host, begin, uri->s + i) < 0) goto err;
+				if (dupl_string(&res->host, begin, uri->s + i - ipv6_flag) < 0) goto err;
 				if (dupl_string(&res->database, uri->s + i + 1, uri->s + uri->len) < 0) goto err;
 				return 0;
+			}
+			break;
+
+		case ST_HOST6:
+			switch(uri->s[i]) {
+			case ']':
+				ipv6_flag = 1;
+				st = ST_HOST;
+				break;
 			}
 			break;
 
@@ -256,7 +277,7 @@ int my_uri(db_uri_t* uri)
 
 	res = (struct my_uri*)pkg_malloc(sizeof(struct my_uri));
 	if (res == NULL) {
-		ERR("mysql: No memory left\n");
+		PKG_MEM_ERROR;
 		goto error;
 	}
 	memset(res, '\0', sizeof(struct my_uri));

@@ -140,7 +140,7 @@ static inline str* kz_str_dup(str* src)
 {
 	char *dst_char = (char*)shm_malloc(sizeof(str)+src->len+1);
 	if (!dst_char) {
-		LM_ERR("error allocating shared memory for str");
+		SHM_MEM_ERROR;
 		return NULL;
 	}
 	str* dst = (str*)dst_char;
@@ -157,7 +157,7 @@ static inline str* kz_str_dup_from_char(char* src)
 	int len = strlen(src);
 	char *dst_char = (char*)shm_malloc(sizeof(str)+len+1);
 	if (!dst_char) {
-		LM_ERR("error allocating shared memory for str");
+		SHM_MEM_ERROR;
 		return NULL;
 	}
 	str* dst = (str*)dst_char;
@@ -216,7 +216,7 @@ static inline str* kz_local_str_dup(str* src)
 {
 	char *dst_char = (char*)pkg_malloc(sizeof(str)+src->len+1);
 	if (!dst_char) {
-		LM_ERR("error allocating shared memory for str");
+		SHM_MEM_ERROR;
 		return NULL;
 	}
 	str* dst = (str*)dst_char;
@@ -247,7 +247,7 @@ static inline str* kz_str_from_amqp_bytes(amqp_bytes_t src)
 {
 	char *dst_char = (char*)shm_malloc(sizeof(str)+src.len+1);
 	if (!dst_char) {
-		LM_ERR("error allocating shared memory for str");
+		SHM_MEM_ERROR;
 		return NULL;
 	}
 	str* dst = (str*)dst_char;
@@ -1531,7 +1531,7 @@ kz_amqp_queue_ptr kz_amqp_queue_new(str *name)
 {
 	kz_amqp_queue_ptr queue = (kz_amqp_queue_ptr) shm_malloc(sizeof(kz_amqp_queue));
 	if(queue == NULL) {
-		LM_ERR("NO MORE SHARED MEMORY!");
+		SHM_MEM_ERROR;
 		return NULL;
 	}
 	memset(queue, 0, sizeof(kz_amqp_queue));
@@ -1558,7 +1558,7 @@ kz_amqp_queue_ptr kz_amqp_queue_from_json(str *name, json_object* json_obj)
 	kz_amqp_queue_ptr queue = kz_amqp_queue_new(name);
 
 	if(queue == NULL) {
-		LM_ERR("NO MORE SHARED MEMORY!");
+		SHM_MEM_ERROR;
 		return NULL;
 	}
 
@@ -1601,7 +1601,7 @@ kz_amqp_exchange_ptr kz_amqp_exchange_new(str *name, str* type)
 {
 	kz_amqp_exchange_ptr exchange = (kz_amqp_exchange_ptr) shm_malloc(sizeof(kz_amqp_exchange));
 	if(exchange == NULL) {
-		LM_ERR("NO MORE SHARED MEMORY!");
+		SHM_MEM_ERROR;
 		return NULL;
 	}
 	memset(exchange, 0, sizeof(kz_amqp_exchange));
@@ -1646,7 +1646,7 @@ kz_amqp_exchange_ptr kz_amqp_exchange_from_json(str *name, json_object* json_obj
 
 	exchange = kz_amqp_exchange_new(name, &type);
 	if(exchange == NULL) {
-		LM_ERR("NO MORE SHARED MEMORY!");
+		SHM_MEM_ERROR;
 		return NULL;
 	}
 
@@ -1723,7 +1723,7 @@ kz_amqp_routings_ptr kz_amqp_routing_from_json(json_object* json_obj)
 		break;
 
    	default:
-   		LM_DBG("type not handled in routing");
+		LM_DBG("type not handled in routing\n");
    		break;
    	}
    	return ret;
@@ -1765,7 +1765,7 @@ kz_amqp_exchange_binding_ptr kz_amqp_exchange_binding_from_json(json_object* JOb
 		    	binding->from_exchange = exchange;
 		    	binding->routing = kz_amqp_routing_from_json(routingObj);
 		    	if(binding->routing == NULL) {
-		    		LM_DBG("invalid routing");
+					LM_DBG("invalid routing\n");
 		    		kz_amqp_exchange_bindings_free(binding);
 		    		binding = NULL;
 		    	} else {
@@ -1802,10 +1802,10 @@ int kz_amqp_subscribe(struct sip_msg* msg, char* payload)
 	str* event_key = NULL;
     str* event_subkey = NULL;
 
-
-
 	json_obj_ptr json_obj = NULL;
 	struct json_object* tmpObj = NULL;
+	kz_amqp_bind_ptr bind = NULL;
+	kz_amqp_binding_ptr binding = NULL;
 
 	if (fixup_get_svalue(msg, (gparam_p)payload, &payload_s) != 0) {
 		LM_ERR("cannot get payload value\n");
@@ -1880,7 +1880,7 @@ int kz_amqp_subscribe(struct sip_msg* msg, char* payload)
 	}
 	queue = kz_amqp_queue_from_json(&queue_s, tmpObj);
 
-	kz_amqp_bind_ptr bind = kz_amqp_bind_alloc(exchange, exchange_binding, queue, routing, event_key, event_subkey);
+	bind = kz_amqp_bind_alloc(exchange, exchange_binding, queue, routing, event_key, event_subkey);
 	if(bind == NULL) {
 		LM_ERR("Could not allocate bind struct\n");
 		goto error;
@@ -1893,7 +1893,7 @@ int kz_amqp_subscribe(struct sip_msg* msg, char* payload)
 	bind->consistent_worker_key = consistent_worker_key;
 
 
-	kz_amqp_binding_ptr binding = shm_malloc(sizeof(kz_amqp_binding));
+	binding = shm_malloc(sizeof(kz_amqp_binding));
 	if(binding == NULL) {
 		LM_ERR("Could not allocate binding struct\n");
 		goto error;
@@ -1935,7 +1935,8 @@ int kz_amqp_subscribe_simple(struct sip_msg* msg, char* exchange, char* exchange
 	kz_amqp_exchange_ptr exchange_ptr = NULL;
 	kz_amqp_queue_ptr queue_ptr = NULL;
 	kz_amqp_routings_ptr routing_ptr = NULL;
-
+	kz_amqp_bind_ptr bind = NULL;
+	kz_amqp_binding_ptr binding = NULL;
 
 	if (fixup_get_svalue(msg, (gparam_p)exchange, &exchange_s) != 0) {
 		LM_ERR("cannot get exchange string value\n");
@@ -1961,7 +1962,7 @@ int kz_amqp_subscribe_simple(struct sip_msg* msg, char* exchange, char* exchange
 	queue_ptr = kz_amqp_queue_new(&queue_s);
 	routing_ptr = kz_amqp_routing_new(routing_key_s.s);
 
-	kz_amqp_bind_ptr bind = kz_amqp_bind_alloc(exchange_ptr, NULL, queue_ptr, routing_ptr, NULL, NULL);
+	bind = kz_amqp_bind_alloc(exchange_ptr, NULL, queue_ptr, routing_ptr, NULL, NULL);
 	if(bind == NULL) {
 		LM_ERR("Could not allocate bind struct\n");
 		goto error;
@@ -1969,7 +1970,7 @@ int kz_amqp_subscribe_simple(struct sip_msg* msg, char* exchange, char* exchange
 
 	bind->no_ack = 1;
 
-	kz_amqp_binding_ptr binding = shm_malloc(sizeof(kz_amqp_binding));
+	binding = shm_malloc(sizeof(kz_amqp_binding));
 	if(binding == NULL) {
 		LM_ERR("Could not allocate binding struct\n");
 		goto error;
@@ -2370,7 +2371,7 @@ void kz_amqp_consumer_event(kz_amqp_consumer_delivery_ptr Evt)
 				if(kz_amqp_consumer_fire_event(buffer) != 0) {
 					sprintf(buffer, "kazoo:consumer-event");
 					if(kz_amqp_consumer_fire_event(buffer) != 0) {
-						LM_ERR("kazoo:consumer-event not found");
+						LM_ERR("kazoo:consumer-event not found\n");
 					}
 				}
             }
@@ -2400,7 +2401,7 @@ void kz_amqp_send_consumer_event_ex(char* payload, char* event_key, char* event_
 {
 	kz_amqp_consumer_delivery_ptr ptr = (kz_amqp_consumer_delivery_ptr) shm_malloc(sizeof(kz_amqp_consumer_delivery));
 	if(ptr == NULL) {
-		LM_ERR("NO MORE SHARED MEMORY!");
+		SHM_MEM_ERROR;
 		return;
 	}
 	memset(ptr, 0, sizeof(kz_amqp_consumer_delivery));
@@ -2466,7 +2467,7 @@ int kz_send_worker_error_event(kz_amqp_cmd_ptr cmd)
 	cmd->return_code = -1;
 	kz_amqp_consumer_delivery_ptr ptr = (kz_amqp_consumer_delivery_ptr) shm_malloc(sizeof(kz_amqp_consumer_delivery));
 	if(ptr == NULL) {
-		LM_ERR("NO MORE SHARED MEMORY!");
+		SHM_MEM_ERROR;
 		return 0;
 	}
 	memset(ptr, 0, sizeof(kz_amqp_consumer_delivery));
@@ -2870,6 +2871,7 @@ void kz_send_targeted_cmd(int server_id, amqp_bytes_t body)
     char* server_id_str = NULL;
     kz_amqp_cmd_ptr cmd = NULL;
     json_object* JObj = NULL;
+    json_obj_ptr json_obj = NULL;
 	char* payload = kz_local_amqp_bytes_dup(body);
 
 	if(payload == NULL) {
@@ -2877,7 +2879,7 @@ void kz_send_targeted_cmd(int server_id, amqp_bytes_t body)
 		goto error;
 	}
 
-	json_obj_ptr json_obj = kz_json_parse(payload );
+	json_obj = kz_json_parse(payload );
     if (json_obj == NULL) {
 		LM_ERR("error parsing json payload\n");
 		goto error;
@@ -2995,7 +2997,7 @@ void kz_amqp_send_worker_event(kz_amqp_server_ptr server_ptr, amqp_envelope_t* e
 
 	ptr = (kz_amqp_consumer_delivery_ptr) shm_malloc(sizeof(kz_amqp_consumer_delivery));
 	if(ptr == NULL) {
-		LM_ERR("NO MORE SHARED MEMORY!");
+		SHM_MEM_ERROR;
 		goto error;
 	}
 	memset(ptr, 0, sizeof(kz_amqp_consumer_delivery));

@@ -40,8 +40,8 @@
 #include "pvapi.h"
 #include "pvar.h"
 
-#define PV_TABLE_SIZE	64  /*!< pseudo-variables table size */
-#define TR_TABLE_SIZE	32  /*!< transformations table size */
+#define PV_TABLE_SIZE	512  /*!< pseudo-variables table size */
+#define TR_TABLE_SIZE	256  /*!< transformations table size */
 
 
 void tr_destroy(trans_t *t);
@@ -236,7 +236,7 @@ int pv_table_add(pv_export_t *e)
 	pvn = (pv_item_t*)pkg_malloc(sizeof(pv_item_t));
 	if(pvn==0)
 	{
-		LM_ERR("no more memory\n");
+		PKG_MEM_ERROR;
 		return -1;
 	}
 	memset(pvn, 0, sizeof(pv_item_t));
@@ -287,6 +287,7 @@ int pv_cache_drop(void)
 					pvi->spec.pvp.pvn.nfree((void*)(&pvi->spec.pvp.pvn));
 				}
 				pkg_free(pvi);
+				_pv_cache_counter--;
 				return 1;
 			}
 			pvp = pvi;
@@ -309,6 +310,7 @@ int pv_cache_drop(void)
 					pvi->spec.pvp.pvn.nfree((void*)(&pvi->spec.pvp.pvn));
 				}
 				pkg_free(pvi);
+				_pv_cache_counter--;
 				return 1;
 			}
 			pvp = pvi;
@@ -347,7 +349,7 @@ pv_spec_t* pv_cache_add(str *name)
 	pvn = (pv_cache_t*)pkg_malloc(sizeof(pv_cache_t) + name->len + 1);
 	if(pvn==0)
 	{
-		LM_ERR("no more memory\n");
+		PKG_MEM_ERROR;
 		return NULL;
 	}
 	memset(pvn, 0, sizeof(pv_cache_t) + name->len + 1);
@@ -364,6 +366,7 @@ pv_spec_t* pv_cache_add(str *name)
 	pvn->pvid = pvid;
 	pvn->next = _pv_cache[pvid%PV_CACHE_SIZE];
 	_pv_cache[pvid%PV_CACHE_SIZE] = pvn;
+	_pv_cache_counter++;
 
 	LM_DBG("pvar [%.*s] added in cache\n", name->len, name->s);
 	return &pvn->spec;
@@ -671,7 +674,8 @@ static char pv_str_empty_buf[2];
 static char pv_str_null_buf[8];
 
 static str pv_str_empty  = { "", 0 };
-static str pv_str_null   = { "<null>", 6 };
+#define PV_STR_NULL_VAL	"<null>"
+static str pv_str_null   = { PV_STR_NULL_VAL, sizeof(PV_STR_NULL_VAL)-1 };
 int pv_get_null(struct sip_msg *msg, pv_param_t *param, pv_value_t *res)
 {
 	if(res==NULL)
@@ -681,6 +685,22 @@ int pv_get_null(struct sip_msg *msg, pv_param_t *param, pv_value_t *res)
 	res->ri = 0;
 	res->flags = PV_VAL_NULL;
 	return 0;
+}
+
+/**
+ *
+ */
+str *pv_get_null_str(void)
+{
+	return &pv_str_null;
+}
+
+/**
+ *
+ */
+str *pv_get_empty_str(void)
+{
+	return &pv_str_empty;
 }
 
 /**
@@ -756,7 +776,7 @@ int pv_parse_index(pv_spec_p sp, str *in)
 		nsp = (pv_spec_p)pkg_malloc(sizeof(pv_spec_t));
 		if(nsp==NULL)
 		{
-			LM_ERR("no more memory\n");
+			PKG_MEM_ERROR;
 			return -1;
 		}
 		s = pv_parse_spec(in, nsp);
@@ -1133,8 +1153,10 @@ int pv_parse_format(str *in, pv_elem_p *el)
 	if(in->len == 0)
 	{
 		*el = pkg_malloc(sizeof(pv_elem_t));
-		if(*el == NULL)
+		if(*el == NULL) {
+			PKG_MEM_ERROR;
 			goto error;
+		}
 		memset(*el, 0, sizeof(pv_elem_t));
 		(*el)->text = *in;
 		return 0;
@@ -1148,8 +1170,10 @@ int pv_parse_format(str *in, pv_elem_p *el)
 	{
 		e0 = e;
 		e = pkg_malloc(sizeof(pv_elem_t));
-		if(!e)
+		if(!e) {
+			PKG_MEM_ERROR;
 			goto error;
+		}
 		memset(e, 0, sizeof(pv_elem_t));
 		n++;
 		if(*el == NULL)
@@ -1244,7 +1268,7 @@ int pv_parse_avp_name(pv_spec_p sp, str *in)
 		nsp = (pv_spec_p)pkg_malloc(sizeof(pv_spec_t));
 		if(nsp==NULL)
 		{
-			LM_ERR("no more memory\n");
+			PKG_MEM_ERROR;
 			return -1;
 		}
 		s = pv_parse_spec(in, nsp);
@@ -1430,7 +1454,8 @@ int pv_printf(struct sip_msg* msg, pv_elem_p list, char *buf, int *len)
 				n += it->text.len;
 				cur += it->text.len;
 			} else {
-				LM_ERR("no more space for text [%d]\n", it->text.len);
+				LM_ERR("no more space for text value - printed:%d token:%d buffer:%d\n",
+						n, it->text.len, *len);
 				goto overflow;
 			}
 		}
@@ -1449,7 +1474,8 @@ int pv_printf(struct sip_msg* msg, pv_elem_p list, char *buf, int *len)
 					cur += tok.rs.len;
 				}
 			} else {
-				LM_ERR("no more space for spec value\n");
+				LM_ERR("no more space for spec value - printed:%d token:%d buffer:%d\n",
+						n, tok.rs.len, *len);
 				goto overflow;
 			}
 		}
@@ -1515,7 +1541,7 @@ pvname_list_t* parse_pvname_list(str *in, unsigned int type)
 		al = (pvname_list_t*)pkg_malloc(sizeof(pvname_list_t));
 		if(al==NULL)
 		{
-			LM_ERR("no more memory!\n");
+			PKG_MEM_ERROR;
 			goto error;
 		}
 		memset(al, 0, sizeof(pvname_list_t));
@@ -1646,7 +1672,7 @@ static inline trans_t* tr_new(void)
 	t = (trans_t*)pkg_malloc(sizeof(trans_t));
 	if(t == NULL)
 	{
-		LM_ERR("no more private memory\n");
+		PKG_MEM_ERROR;
 		return NULL;
 	}
 	memset(t, 0, sizeof(trans_t));
@@ -1875,7 +1901,7 @@ int tr_table_add(tr_export_t *e)
 	trn = (tr_item_t*)pkg_malloc(sizeof(tr_item_t));
 	if(trn==0)
 	{
-		LM_ERR("no more memory\n");
+		PKG_MEM_ERROR;
 		return -1;
 	}
 	memset(trn, 0, sizeof(tr_item_t));
@@ -1998,7 +2024,7 @@ int pv_init_api(void)
 	pv_str_empty_buf[0] = '\0';
 	pv_str_empty_buf[1] = '\0';
 	pv_str_empty.s = pv_str_empty_buf;
-	strcpy(pv_str_null_buf, "<null>");
+	strcpy(pv_str_null_buf, PV_STR_NULL_VAL);
 	pv_str_null.s = pv_str_null_buf;
 
 	if(register_pvars_mod("core", _core_pvs)<0)
@@ -2045,7 +2071,7 @@ int pv_init_buffer(void)
 		(char**)pkg_malloc(_pv_print_buffer_slots*sizeof(char*));
 	if(_pv_print_buffer==NULL)
 	{
-		LM_ERR("cannot init PV print buffer slots\n");
+		PKG_MEM_ERROR;
 		return -1;
 	}
 	memset(_pv_print_buffer, 0, _pv_print_buffer_slots*sizeof(char*));
@@ -2055,7 +2081,7 @@ int pv_init_buffer(void)
 			(char*)pkg_malloc(_pv_print_buffer_size*sizeof(char));
 		if(_pv_print_buffer[i]==NULL)
 		{
-			LM_ERR("cannot init PV print buffer slot[%d]\n", i);
+			PKG_MEM_ERROR;
 			return -1;
 		}
 	}

@@ -95,15 +95,20 @@ int ruby_sr_init_mod(void)
 	return 0;
 }
 
-static void app_ruby_print_last_exception()
+static int app_ruby_print_last_exception()
 {
 	VALUE rException, rExceptStr;
 
 	rException = rb_errinfo();         /* get last exception */
 	rb_set_errinfo(Qnil);              /* clear last exception */
 	rExceptStr = rb_funcall(rException, rb_intern("to_s"), 0, Qnil);
-	LM_ERR("exception: %s\n", StringValuePtr(rExceptStr));
-	return;
+	if(RSTRING_LEN(rExceptStr)!=4
+			|| strncmp(RSTRING_PTR(rExceptStr), "exit", 4)!=0) {
+		LM_ERR("exception: %.*s\n", (int)RSTRING_LEN(rExceptStr),
+				RSTRING_PTR(rExceptStr));
+		return 0;
+	}
+	return 1;
 }
 
 /**
@@ -231,7 +236,7 @@ int ruby_sr_initialized(void)
  */
 int sr_kemi_ruby_return_int(sr_kemi_t *ket, int rc)
 {
-	if(ket->rtype==SR_KEMIP_INT) {
+	if(ket->rtype==SR_KEMIP_INT || ket->rtype==SR_KEMIP_XVAL) {
 		return INT2NUM(rc);
 	}
 	if(ket->rtype==SR_KEMIP_BOOL && rc!=SR_KEMI_FALSE) {
@@ -239,333 +244,6 @@ int sr_kemi_ruby_return_int(sr_kemi_t *ket, int rc)
 	}
 	return Qfalse;
 }
-
-/**
- *
- */
-static VALUE sr_kemi_ruby_return_none(int rmode)
-{
-	if(rmode==1) {
-		return rb_str_new_cstr("<<null>>");
-	} else if(rmode==2) {
-		return rb_str_new_cstr("");
-	}
-	return Qnil;
-}
-
-/**
- *
- */
-static VALUE app_ruby_pv_get_mode(int argc, VALUE* argv, VALUE self, int rmode)
-{
-	str pvn;
-	pv_spec_t *pvs;
-	pv_value_t val;
-	sr_ruby_env_t *env_R;
-	int pl;
-
-	env_R = app_ruby_sr_env_get();
-
-	if(env_R==NULL || env_R->msg==NULL || argc!=1) {
-		LM_ERR("invalid ruby environment attributes or parameters\n");
-		return sr_kemi_ruby_return_none(rmode);
-	}
-
-	if(!RB_TYPE_P(argv[0], T_STRING)) {
-		LM_ERR("invalid parameter type\n");
-		return sr_kemi_ruby_return_none(rmode);
-	}
-
-	pvn.s = StringValuePtr(argv[0]);
-	if(pvn.s==NULL)
-		return sr_kemi_ruby_return_none(rmode);
-	pvn.len = strlen(pvn.s);
-
-	LM_DBG("pv get: %s\n", pvn.s);
-	pl = pv_locate_name(&pvn);
-	if(pl != pvn.len) {
-		LM_ERR("invalid pv [%s] (%d/%d)\n", pvn.s, pl, pvn.len);
-		return sr_kemi_ruby_return_none(rmode);
-	}
-	pvs = pv_cache_get(&pvn);
-	if(pvs==NULL) {
-		LM_ERR("cannot get pv spec for [%s]\n", pvn.s);
-		return sr_kemi_ruby_return_none(rmode);
-	}
-	memset(&val, 0, sizeof(pv_value_t));
-	if(pv_get_spec_value(env_R->msg, pvs, &val) != 0) {
-		LM_ERR("unable to get pv value for [%s]\n", pvn.s);
-		return sr_kemi_ruby_return_none(rmode);
-	}
-	if(val.flags&PV_VAL_NULL) {
-		return sr_kemi_ruby_return_none(rmode);
-	}
-	if(val.flags&PV_TYPE_INT) {
-		return INT2NUM(val.ri);
-	}
-	return rb_str_new(val.rs.s, val.rs.len);
-}
-
-/**
- *
- */
-static VALUE app_ruby_pv_get(int argc, VALUE* argv, VALUE self)
-{
-	return app_ruby_pv_get_mode(argc, argv, self, 0);
-}
-
-/**
- *
- */
-static VALUE app_ruby_pv_getw(int argc, VALUE* argv, VALUE self)
-{
-	return app_ruby_pv_get_mode(argc, argv, self, 1);
-}
-
-/**
- *
- */
-static VALUE app_ruby_pv_gete(int argc, VALUE* argv, VALUE self)
-{
-	return app_ruby_pv_get_mode(argc, argv, self, 2);
-}
-
-/**
- *
- */
-static VALUE app_ruby_pv_seti(int argc, VALUE* argv, VALUE self)
-{
-	str pvn;
-	pv_spec_t *pvs;
-	pv_value_t val;
-	sr_ruby_env_t *env_R;
-	int pl;
-
-	env_R = app_ruby_sr_env_get();
-
-	if(env_R==NULL || env_R->msg==NULL || argc!=2) {
-		LM_ERR("invalid ruby environment attributes or parameters\n");
-		return Qfalse;
-	}
-
-	if(!RB_TYPE_P(argv[0], T_STRING)) {
-		LM_ERR("invalid pv name parameter type\n");
-		return Qfalse;
-	}
-
-	if(!RB_TYPE_P(argv[2], T_FIXNUM)) {
-		LM_ERR("invalid pv val parameter type\n");
-		return Qfalse;
-	}
-
-	pvn.s = StringValuePtr(argv[0]);
-	if(pvn.s==NULL)
-		return Qfalse;
-	pvn.len = strlen(pvn.s);
-
-	LM_DBG("pv get: %s\n", pvn.s);
-	pl = pv_locate_name(&pvn);
-	if(pl != pvn.len) {
-		LM_ERR("invalid pv [%s] (%d/%d)\n", pvn.s, pl, pvn.len);
-		return Qfalse;
-	}
-	pvs = pv_cache_get(&pvn);
-	if(pvs==NULL) {
-		LM_ERR("cannot get pv spec for [%s]\n", pvn.s);
-		return Qfalse;
-	}
-
-	memset(&val, 0, sizeof(pv_value_t));
-	val.ri = NUM2INT(argv[1]);
-	val.flags |= PV_TYPE_INT|PV_VAL_INT;
-
-	if(pv_set_spec_value(env_R->msg, pvs, 0, &val)<0) {
-		LM_ERR("unable to set pv [%s]\n", pvn.s);
-		return Qfalse;
-	}
-
-	return Qtrue;
-}
-
-/**
- *
- */
-static VALUE app_ruby_pv_sets(int argc, VALUE* argv, VALUE self)
-{
-	str pvn;
-	pv_spec_t *pvs;
-	pv_value_t val;
-	sr_ruby_env_t *env_R;
-	int pl;
-
-	env_R = app_ruby_sr_env_get();
-
-	if(env_R==NULL || env_R->msg==NULL || argc!=2) {
-		LM_ERR("invalid ruby environment attributes or parameters\n");
-		return Qfalse;
-	}
-
-	if(!RB_TYPE_P(argv[0], T_STRING)) {
-		LM_ERR("invalid pv name parameter type\n");
-		return Qfalse;
-	}
-
-	if(!RB_TYPE_P(argv[2], T_FIXNUM)) {
-		LM_ERR("invalid pv val parameter type\n");
-		return Qfalse;
-	}
-
-	pvn.s = StringValuePtr(argv[0]);
-	if(pvn.s==NULL)
-		return Qfalse;
-	pvn.len = strlen(pvn.s);
-
-	LM_DBG("pv get: %s\n", pvn.s);
-	pl = pv_locate_name(&pvn);
-	if(pl != pvn.len) {
-		LM_ERR("invalid pv [%s] (%d/%d)\n", pvn.s, pl, pvn.len);
-		return Qfalse;
-	}
-	pvs = pv_cache_get(&pvn);
-	if(pvs==NULL) {
-		LM_ERR("cannot get pv spec for [%s]\n", pvn.s);
-		return Qfalse;
-	}
-
-	memset(&val, 0, sizeof(pv_value_t));
-	val.rs.s = StringValuePtr(argv[1]);
-	if(val.rs.s==NULL) {
-		LM_ERR("invalid str value\n");
-		return Qfalse;
-	}
-	val.rs.len = strlen(val.rs.s);
-	val.flags |= PV_VAL_STR;
-
-	if(pv_set_spec_value(env_R->msg, pvs, 0, &val)<0) {
-		LM_ERR("unable to set pv [%s]\n", pvn.s);
-		return Qfalse;
-	}
-
-	return Qtrue;
-}
-
-/**
- *
- */
-static VALUE app_ruby_pv_unset(int argc, VALUE* argv, VALUE self)
-{
-	str pvn;
-	pv_spec_t *pvs;
-	pv_value_t val;
-	sr_ruby_env_t *env_R;
-	int pl;
-
-	env_R = app_ruby_sr_env_get();
-
-	if(env_R==NULL || env_R->msg==NULL || argc!=1) {
-		LM_ERR("invalid ruby environment attributes or parameters\n");
-		return Qfalse;
-	}
-
-	if(!RB_TYPE_P(argv[0], T_STRING)) {
-		LM_ERR("invalid parameter type\n");
-		return Qfalse;
-	}
-
-	pvn.s = StringValuePtr(argv[0]);
-	if(pvn.s==NULL)
-		return Qfalse;
-	pvn.len = strlen(pvn.s);
-
-	LM_DBG("pv get: %s\n", pvn.s);
-	pl = pv_locate_name(&pvn);
-	if(pl != pvn.len) {
-		LM_ERR("invalid pv [%s] (%d/%d)\n", pvn.s, pl, pvn.len);
-		return Qfalse;
-	}
-	pvs = pv_cache_get(&pvn);
-	if(pvs==NULL) {
-		LM_ERR("cannot get pv spec for [%s]\n", pvn.s);
-		return Qfalse;
-	}
-
-	memset(&val, 0, sizeof(pv_value_t));
-	val.flags |= PV_VAL_NULL;
-	if(pv_set_spec_value(env_R->msg, pvs, 0, &val)<0)
-	{
-		LM_ERR("unable to unset pv [%s]\n", pvn.s);
-		return Qfalse;
-	}
-
-	return Qtrue;
-}
-
-/**
- *
- */
-static VALUE app_ruby_pv_is_null(int argc, VALUE* argv, VALUE self)
-{
-	str pvn;
-	pv_spec_t *pvs;
-	pv_value_t val;
-	sr_ruby_env_t *env_R;
-	int pl;
-
-	env_R = app_ruby_sr_env_get();
-
-	if(env_R==NULL || env_R->msg==NULL || argc!=1) {
-		LM_ERR("invalid ruby environment attributes or parameters\n");
-		return Qfalse;
-	}
-
-	if(!RB_TYPE_P(argv[0], T_STRING)) {
-		LM_ERR("invalid parameter type\n");
-		return Qfalse;
-	}
-
-	pvn.s = StringValuePtr(argv[0]);
-	if(pvn.s==NULL)
-		return Qfalse;
-	pvn.len = strlen(pvn.s);
-
-	LM_DBG("pv get: %s\n", pvn.s);
-	pl = pv_locate_name(&pvn);
-	if(pl != pvn.len) {
-		LM_ERR("invalid pv [%s] (%d/%d)\n", pvn.s, pl, pvn.len);
-		return Qfalse;
-	}
-	pvs = pv_cache_get(&pvn);
-	if(pvs==NULL) {
-		LM_ERR("cannot get pv spec for [%s]\n", pvn.s);
-		return Qfalse;
-	}
-
-	memset(&val, 0, sizeof(pv_value_t));
-	if(pv_get_spec_value(env_R->msg, pvs, &val) != 0) {
-		LM_NOTICE("unable to get pv value for [%s]\n", pvn.s);
-		return Qtrue;
-	}
-	if(val.flags&PV_VAL_NULL) {
-		return Qtrue;
-	} else {
-		pv_value_destroy(&val);
-		return Qfalse;
-	}
-}
-
-/**
- *
- */
-static ksr_ruby_export_t _sr_kemi_pv_R_Map[] = {
-	{"PV", "get", app_ruby_pv_get},
-	{"PV", "getw", app_ruby_pv_getw},
-	{"PV", "gete", app_ruby_pv_gete},
-	{"PV", "seti", app_ruby_pv_seti},
-	{"PV", "sets", app_ruby_pv_sets},
-	{"PV", "unset", app_ruby_pv_unset},
-	{"PV", "is_null", app_ruby_pv_is_null},
-	{0, 0, 0}
-};
 
 /**
  *
@@ -600,11 +278,11 @@ static VALUE app_ruby_sr_modf(int argc, VALUE* argv, VALUE self)
 	}
 	/* first is function name, then parameters */
 	for(i=0; i<argc; i++) {
-		if(!RB_TYPE_P(argv[0], T_STRING)) {
+		if(!RB_TYPE_P(argv[i], T_STRING)) {
 			LM_ERR("invalid parameter type (%d)\n", i);
 			return INT2NUM(-1);
 		}
-		rbv[i] = (char*)StringValuePtr(argv[0]);
+		rbv[i] = (char*)StringValuePtr(argv[i]);
 	}
 	LM_ERR("request to execute cfg function '%s'\n", rbv[0]);
 	/* pkg copy only parameters */
@@ -740,31 +418,63 @@ static VALUE ksr_ruby_exec_callback(VALUE ptr)
 }
 
 /**
- * 
+ *
  */
-VALUE sr_kemi_ruby_exec_func(ksr_ruby_context_t *R, int eidx, int argc,
+VALUE sr_kemi_ruby_return_xval(sr_kemi_t *ket, sr_kemi_xval_t *rx)
+{
+	switch(rx->vtype) {
+		case SR_KEMIP_NONE:
+			return Qnil;
+		case SR_KEMIP_INT:
+			return INT2NUM(rx->v.n);
+		case SR_KEMIP_STR:
+			return rb_str_new(rx->v.s.s, rx->v.s.len);
+		case SR_KEMIP_BOOL:
+			if(rx->v.n!=SR_KEMI_FALSE) {
+				return Qtrue;
+			} else {
+				return Qfalse;
+			}
+		case SR_KEMIP_XVAL:
+			/* unknown content - return false */
+			return Qfalse;
+		case SR_KEMIP_NULL:
+			return Qnil;
+		default:
+			/* unknown type - return false */
+			return Qfalse;
+	}
+}
+
+/**
+ *
+ */
+VALUE sr_kemi_ruby_exec_func_ex(ksr_ruby_context_t *R, sr_kemi_t *ket, int argc,
 		VALUE* argv, VALUE self)
 {
 	sr_kemi_val_t vps[SR_KEMI_PARAMS_MAX];
 	sr_ruby_env_t *env_R;
-	sr_kemi_t *ket;
 	str *fname;
 	str *mname;
 	int i;
 	int ret = -1;
+	sr_kemi_xval_t *xret;
 
 	env_R = app_ruby_sr_env_get();
-	ket = sr_kemi_ruby_export_get(eidx);
-
-	LM_DBG("executing %p eidx %d\n", ket, eidx);
 	if(env_R==NULL || env_R->msg==NULL || ket==NULL) {
-		LM_ERR("invalid ruby environment attributes or parameters\n");
+		LM_ERR("invalid ruby environment attributes or parameters (%p/%p/%p)\n",
+				env_R, env_R->msg, ket);
 		return Qfalse;
 	}
 
 	if(argc==0 && ket->ptypes[0]==SR_KEMIP_NONE) {
-		ret = ((sr_kemi_fm_f)(ket->func))(env_R->msg);
-		return sr_kemi_ruby_return_int(ket, ret);
+		if(ket->rtype==SR_KEMIP_XVAL) {
+			xret = ((sr_kemi_xfm_f)(ket->func))(env_R->msg);
+			return sr_kemi_ruby_return_xval(ket, xret);
+		} else {
+			ret = ((sr_kemi_fm_f)(ket->func))(env_R->msg);
+			return sr_kemi_ruby_return_int(ket, ret);
+		}
 	}
 	fname = &ket->fname;
 	mname = &ket->mname;
@@ -810,11 +520,21 @@ VALUE sr_kemi_ruby_exec_func(ksr_ruby_context_t *R, int eidx, int argc,
 	switch(i) {
 		case 1:
 			if(ket->ptypes[0]==SR_KEMIP_INT) {
-				ret = ((sr_kemi_fmn_f)(ket->func))(env_R->msg, vps[0].n);
-				return sr_kemi_ruby_return_int(ket, ret);
+				if(ket->rtype==SR_KEMIP_XVAL) {
+					xret = ((sr_kemi_xfmn_f)(ket->func))(env_R->msg, vps[0].n);
+					return sr_kemi_ruby_return_xval(ket, xret);
+				} else {
+					ret = ((sr_kemi_fmn_f)(ket->func))(env_R->msg, vps[0].n);
+					return sr_kemi_ruby_return_int(ket, ret);
+				}
 			} else if(ket->ptypes[0]==SR_KEMIP_STR) {
-				ret = ((sr_kemi_fms_f)(ket->func))(env_R->msg, &vps[0].s);
-				return sr_kemi_ruby_return_int(ket, ret);
+				if(ket->rtype==SR_KEMIP_XVAL) {
+					xret = ((sr_kemi_xfms_f)(ket->func))(env_R->msg, &vps[0].s);
+					return sr_kemi_ruby_return_xval(ket, xret);
+				} else {
+					ret = ((sr_kemi_fms_f)(ket->func))(env_R->msg, &vps[0].s);
+					return sr_kemi_ruby_return_int(ket, ret);
+				}
 			} else {
 				LM_ERR("invalid parameters for: %.*s\n",
 						fname->len, fname->s);
@@ -824,11 +544,21 @@ VALUE sr_kemi_ruby_exec_func(ksr_ruby_context_t *R, int eidx, int argc,
 		case 2:
 			if(ket->ptypes[0]==SR_KEMIP_INT) {
 				if(ket->ptypes[1]==SR_KEMIP_INT) {
-					ret = ((sr_kemi_fmnn_f)(ket->func))(env_R->msg, vps[0].n, vps[1].n);
-					return sr_kemi_ruby_return_int(ket, ret);
+					if(ket->rtype==SR_KEMIP_XVAL) {
+						xret = ((sr_kemi_xfmnn_f)(ket->func))(env_R->msg, vps[0].n, vps[1].n);
+						return sr_kemi_ruby_return_xval(ket, xret);
+					} else {
+						ret = ((sr_kemi_fmnn_f)(ket->func))(env_R->msg, vps[0].n, vps[1].n);
+						return sr_kemi_ruby_return_int(ket, ret);
+					}
 				} else if(ket->ptypes[1]==SR_KEMIP_STR) {
-					ret = ((sr_kemi_fmns_f)(ket->func))(env_R->msg, vps[0].n, &vps[1].s);
-					return sr_kemi_ruby_return_int(ket, ret);
+					if(ket->rtype==SR_KEMIP_XVAL) {
+						xret = ((sr_kemi_xfmns_f)(ket->func))(env_R->msg, vps[0].n, &vps[1].s);
+						return sr_kemi_ruby_return_xval(ket, xret);
+					} else {
+						ret = ((sr_kemi_fmns_f)(ket->func))(env_R->msg, vps[0].n, &vps[1].s);
+						return sr_kemi_ruby_return_int(ket, ret);
+					}
 				} else {
 					LM_ERR("invalid parameters for: %.*s\n",
 							fname->len, fname->s);
@@ -836,11 +566,21 @@ VALUE sr_kemi_ruby_exec_func(ksr_ruby_context_t *R, int eidx, int argc,
 				}
 			} else if(ket->ptypes[0]==SR_KEMIP_STR) {
 				if(ket->ptypes[1]==SR_KEMIP_INT) {
-					ret = ((sr_kemi_fmsn_f)(ket->func))(env_R->msg, &vps[0].s, vps[1].n);
-					return sr_kemi_ruby_return_int(ket, ret);
+					if(ket->rtype==SR_KEMIP_XVAL) {
+						xret = ((sr_kemi_xfmsn_f)(ket->func))(env_R->msg, &vps[0].s, vps[1].n);
+						return sr_kemi_ruby_return_xval(ket, xret);
+					} else {
+						ret = ((sr_kemi_fmsn_f)(ket->func))(env_R->msg, &vps[0].s, vps[1].n);
+						return sr_kemi_ruby_return_int(ket, ret);
+					}
 				} else if(ket->ptypes[1]==SR_KEMIP_STR) {
-					ret = ((sr_kemi_fmss_f)(ket->func))(env_R->msg, &vps[0].s, &vps[1].s);
-					return sr_kemi_ruby_return_int(ket, ret);
+					if(ket->rtype==SR_KEMIP_XVAL) {
+						xret = ((sr_kemi_xfmss_f)(ket->func))(env_R->msg, &vps[0].s, &vps[1].s);
+						return sr_kemi_ruby_return_xval(ket, xret);
+					} else {
+						ret = ((sr_kemi_fmss_f)(ket->func))(env_R->msg, &vps[0].s, &vps[1].s);
+						return sr_kemi_ruby_return_int(ket, ret);
+					}
 				} else {
 					LM_ERR("invalid parameters for: %.*s\n",
 							fname->len, fname->s);
@@ -945,9 +685,37 @@ VALUE sr_kemi_ruby_exec_func(ksr_ruby_context_t *R, int eidx, int argc,
 			} else if(ket->ptypes[0]==SR_KEMIP_STR
 					&& ket->ptypes[1]==SR_KEMIP_STR
 					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmssns_f)(ket->func))(env_R->msg,
+						&vps[0].s, &vps[1].s, vps[2].n, &vps[3].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_INT
 					&& ket->ptypes[3]==SR_KEMIP_INT) {
 				ret = ((sr_kemi_fmssnn_f)(ket->func))(env_R->msg,
 						&vps[0].s, &vps[1].s, vps[2].n, vps[3].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmsnss_f)(ket->func))(env_R->msg,
+						&vps[0].s, vps[1].n, &vps[2].s, &vps[3].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmsnsn_f)(ket->func))(env_R->msg,
+						&vps[0].s, vps[1].n, &vps[2].s, vps[3].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmsnns_f)(ket->func))(env_R->msg,
+						&vps[0].s, vps[1].n, vps[2].n, &vps[3].s);
 				return sr_kemi_ruby_return_int(ket, ret);
 			} else if(ket->ptypes[0]==SR_KEMIP_STR
 					&& ket->ptypes[1]==SR_KEMIP_INT
@@ -964,11 +732,39 @@ VALUE sr_kemi_ruby_exec_func(ksr_ruby_context_t *R, int eidx, int argc,
 						vps[0].n, &vps[1].s, &vps[2].s, &vps[3].s);
 				return sr_kemi_ruby_return_int(ket, ret);
 			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmnssn_f)(ket->func))(env_R->msg,
+						vps[0].n, &vps[1].s, &vps[2].s, vps[3].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmnsns_f)(ket->func))(env_R->msg,
+						vps[0].n, &vps[1].s, vps[2].n, &vps[3].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmnsnn_f)(ket->func))(env_R->msg,
+						vps[0].n, &vps[1].s, vps[2].n, vps[3].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
 					&& ket->ptypes[1]==SR_KEMIP_INT
 					&& ket->ptypes[2]==SR_KEMIP_STR
 					&& ket->ptypes[3]==SR_KEMIP_STR) {
 				ret = ((sr_kemi_fmnnss_f)(ket->func))(env_R->msg,
 						vps[0].n, vps[1].n, &vps[2].s, &vps[3].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmnnsn_f)(ket->func))(env_R->msg,
+						vps[0].n, vps[1].n, &vps[2].s, vps[3].n);
 				return sr_kemi_ruby_return_int(ket, ret);
 			} else if(ket->ptypes[0]==SR_KEMIP_INT
 					&& ket->ptypes[1]==SR_KEMIP_INT
@@ -985,8 +781,7 @@ VALUE sr_kemi_ruby_exec_func(ksr_ruby_context_t *R, int eidx, int argc,
 						vps[0].n, vps[1].n, vps[2].n, vps[3].n);
 				return sr_kemi_ruby_return_int(ket, ret);
 			} else {
-				LM_ERR("invalid parameters for: %.*s\n",
-						fname->len, fname->s);
+				LM_ERR("invalid parameters for: %.*s\n", fname->len, fname->s);
 				return Qfalse;
 			}
 		break;
@@ -997,12 +792,258 @@ VALUE sr_kemi_ruby_exec_func(ksr_ruby_context_t *R, int eidx, int argc,
 					&& ket->ptypes[3]==SR_KEMIP_STR
 					&& ket->ptypes[4]==SR_KEMIP_STR) {
 				ret = ((sr_kemi_fmsssss_f)(ket->func))(env_R->msg,
-						&vps[0].s, &vps[1].s, &vps[2].s, &vps[3].s,
-						&vps[4].s);
+						&vps[0].s, &vps[1].s, &vps[2].s, &vps[3].s, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmssssn_f)(ket->func))(env_R->msg,
+						&vps[0].s, &vps[1].s, &vps[2].s, &vps[3].s, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmsssns_f)(ket->func))(env_R->msg,
+						&vps[0].s, &vps[1].s, &vps[2].s, vps[3].n, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmsssnn_f)(ket->func))(env_R->msg,
+						&vps[0].s, &vps[1].s, &vps[2].s, vps[3].n, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmssnss_f)(ket->func))(env_R->msg,
+						&vps[0].s, &vps[1].s, vps[2].n, &vps[3].s, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmssnsn_f)(ket->func))(env_R->msg,
+						&vps[0].s, &vps[1].s, vps[2].n, &vps[3].s, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmssnns_f)(ket->func))(env_R->msg,
+						&vps[0].s, &vps[1].s, vps[2].n, vps[3].n, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmssnnn_f)(ket->func))(env_R->msg,
+						&vps[0].s, &vps[1].s, vps[2].n, vps[3].n, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmsnsss_f)(ket->func))(env_R->msg,
+						&vps[0].s, vps[1].n, &vps[2].s, &vps[3].s, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmsnssn_f)(ket->func))(env_R->msg,
+						&vps[0].s, vps[1].n, &vps[2].s, &vps[3].s, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmsnsns_f)(ket->func))(env_R->msg,
+						&vps[0].s, vps[1].n, &vps[2].s, vps[3].n, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmsnsnn_f)(ket->func))(env_R->msg,
+						&vps[0].s, vps[1].n, &vps[2].s, vps[3].n, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmsnnss_f)(ket->func))(env_R->msg,
+						&vps[0].s, vps[1].n, vps[2].n, &vps[3].s, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmsnnsn_f)(ket->func))(env_R->msg,
+						&vps[0].s, vps[1].n, vps[2].n, &vps[3].s, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmsnnns_f)(ket->func))(env_R->msg,
+						&vps[0].s, vps[1].n, vps[2].n, vps[3].n, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_STR
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmsnnnn_f)(ket->func))(env_R->msg,
+						&vps[0].s, vps[1].n, vps[2].n, vps[3].n, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmnssss_f)(ket->func))(env_R->msg,
+						vps[0].n, &vps[1].s, &vps[2].s, &vps[3].s, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmnsssn_f)(ket->func))(env_R->msg,
+						vps[0].n, &vps[1].s, &vps[2].s, &vps[3].s, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmnssns_f)(ket->func))(env_R->msg,
+						vps[0].n, &vps[1].s, &vps[2].s, vps[3].n, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmnssnn_f)(ket->func))(env_R->msg,
+						vps[0].n, &vps[1].s, &vps[2].s, vps[3].n, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmnsnss_f)(ket->func))(env_R->msg,
+						vps[0].n, &vps[1].s, vps[2].n, &vps[3].s, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmnsnsn_f)(ket->func))(env_R->msg,
+						vps[0].n, &vps[1].s, vps[2].n, &vps[3].s, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmnsnns_f)(ket->func))(env_R->msg,
+						vps[0].n, &vps[1].s, vps[2].n, vps[3].n, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_STR
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmnsnnn_f)(ket->func))(env_R->msg,
+						vps[0].n, &vps[1].s, vps[2].n, vps[3].n, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmnnsss_f)(ket->func))(env_R->msg,
+						vps[0].n, vps[1].n, &vps[2].s, &vps[3].s, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmnnssn_f)(ket->func))(env_R->msg,
+						vps[0].n, vps[1].n, &vps[2].s, &vps[3].s, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmnnsns_f)(ket->func))(env_R->msg,
+						vps[0].n, vps[1].n, &vps[2].s, vps[3].n, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_STR
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmnnsnn_f)(ket->func))(env_R->msg,
+						vps[0].n, vps[1].n, &vps[2].s, vps[3].n, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmnnnss_f)(ket->func))(env_R->msg,
+						vps[0].n, vps[1].n, vps[2].n, &vps[3].s, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_STR
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmnnnsn_f)(ket->func))(env_R->msg,
+						vps[0].n, vps[1].n, vps[2].n, &vps[3].s, vps[4].n);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_STR) {
+				ret = ((sr_kemi_fmnnnns_f)(ket->func))(env_R->msg,
+						vps[0].n, vps[1].n, vps[2].n, vps[3].n, &vps[4].s);
+				return sr_kemi_ruby_return_int(ket, ret);
+			} else if(ket->ptypes[0]==SR_KEMIP_INT
+					&& ket->ptypes[1]==SR_KEMIP_INT
+					&& ket->ptypes[2]==SR_KEMIP_INT
+					&& ket->ptypes[3]==SR_KEMIP_INT
+					&& ket->ptypes[4]==SR_KEMIP_INT) {
+				ret = ((sr_kemi_fmnnnnn_f)(ket->func))(env_R->msg,
+						vps[0].n, vps[1].n, vps[2].n, vps[3].n, vps[4].n);
 				return sr_kemi_ruby_return_int(ket, ret);
 			} else {
-				LM_ERR("invalid parameters for: %.*s\n",
-						fname->len, fname->s);
+				LM_ERR("invalid parameters for: %.*s\n", fname->len, fname->s);
 				return Qfalse;
 			}
 		break;
@@ -1028,6 +1069,47 @@ VALUE sr_kemi_ruby_exec_func(ksr_ruby_context_t *R, int eidx, int argc,
 					fname->len, fname->s);
 			return Qfalse;
 	}
+}
+
+/**
+ *
+ */
+VALUE sr_kemi_ruby_exec_func(ksr_ruby_context_t *R, int eidx, int argc,
+		VALUE* argv, VALUE self)
+{
+	sr_kemi_t *ket;
+	int ret;
+	struct timeval tvb, tve;
+	struct timezone tz;
+	unsigned int tdiff;
+
+	ket = sr_kemi_ruby_export_get(eidx);
+
+	LM_DBG("executing %p eidx %d\n", ket, eidx);
+
+	if(unlikely(cfg_get(core, core_cfg, latency_limit_action)>0)
+			&& is_printable(cfg_get(core, core_cfg, latency_log))) {
+		gettimeofday(&tvb, &tz);
+	}
+
+	ret = sr_kemi_ruby_exec_func_ex(R, ket, argc, argv, self);
+
+	if(unlikely(cfg_get(core, core_cfg, latency_limit_action)>0)
+			&& is_printable(cfg_get(core, core_cfg, latency_log))) {
+		gettimeofday(&tve, &tz);
+		tdiff = (tve.tv_sec - tvb.tv_sec) * 1000000
+				   + (tve.tv_usec - tvb.tv_usec);
+		if(tdiff >= cfg_get(core, core_cfg, latency_limit_action)) {
+			LOG(cfg_get(core, core_cfg, latency_log),
+						"alert - action KSR.%s%s%s(...)"
+						" took too long [%u us]\n",
+						(ket->mname.len>0)?ket->mname.s:"",
+						(ket->mname.len>0)?".":"", ket->fname.s,
+						tdiff);
+		}
+	}
+
+	return ret;
 }
 
 /**
@@ -1073,10 +1155,11 @@ int app_ruby_run_ex(sip_msg_t *msg, char *func, char *p1, char *p2,
 	_sr_R_env.msg = bmsg;
 
 	if (rberr) {
-		app_ruby_print_last_exception();
-		LM_ERR("ruby exception (%d) on callback for: %s (res type: %d)\n",
-				rberr, func, TYPE(rbres));
-		return -1;
+		if(app_ruby_print_last_exception()==0) {
+			LM_ERR("ruby exception (%d) on callback for: %s (res type: %d)\n",
+					rberr, func, TYPE(rbres));
+			return -1;
+		}
 	}
 
 	return 1;
@@ -1190,15 +1273,6 @@ int app_ruby_kemi_export_libs(void)
 	}
 
 	m = 0;
-	/* pv submodule */
-	_ksr_mSMD[m] = rb_define_module_under(_ksr_mKSR, "PV");
-	for(i=0; _sr_kemi_pv_R_Map[i].fname!=0; i++) {
-		LM_DBG("exporting KSR.PV.%s(...)\n", _sr_kemi_pv_R_Map[i].fname);
-		rb_define_singleton_method(_ksr_mSMD[m], _sr_kemi_pv_R_Map[i].fname,
-				_sr_kemi_pv_R_Map[i].func, -1);
-	}
-	LM_DBG("initialized kemi sub-module: KSR.PV\n");
-	m++;
 
 	/* x submodule */
 	_ksr_mSMD[m] = rb_define_module_under(_ksr_mKSR, "X");
@@ -1245,10 +1319,113 @@ int app_ruby_kemi_export_libs(void)
 	return 1;
 }
 
+static const char* app_ruby_rpc_reload_doc[2] = {
+	"Reload javascript file",
+	0
+};
+
+
+static void app_ruby_rpc_reload(rpc_t* rpc, void* ctx)
+{
+	int v;
+	void *vh;
+
+	if(_sr_ruby_load_file.s == NULL && _sr_ruby_load_file.len<=0) {
+		LM_WARN("script file path not provided\n");
+		rpc->fault(ctx, 500, "No script file");
+		return;
+	}
+	if(_sr_ruby_reload_version == NULL) {
+		LM_WARN("reload not enabled\n");
+		rpc->fault(ctx, 500, "Reload not enabled");
+		return;
+	}
+
+	v = *_sr_ruby_reload_version;
+	*_sr_ruby_reload_version += 1;
+	LM_INFO("marking for reload ruby script file: %.*s (%d / %d => %d)\n",
+				_sr_ruby_load_file.len, _sr_ruby_load_file.s,
+				_sr_ruby_local_version, v, *_sr_ruby_reload_version);
+
+	if (rpc->add(ctx, "{", &vh) < 0) {
+		rpc->fault(ctx, 500, "Server error");
+		return;
+	}
+	rpc->struct_add(vh, "dd",
+			"old", v,
+			"new", *_sr_ruby_reload_version);
+}
+
+static const char* app_ruby_rpc_api_list_doc[2] = {
+	"List kemi exports to ruby",
+	0
+};
+
+static void app_ruby_rpc_api_list(rpc_t* rpc, void* ctx)
+{
+	int i;
+	int n;
+	sr_kemi_t *ket;
+	void* th;
+	void* sh;
+	void* ih;
+
+	if (rpc->add(ctx, "{", &th) < 0) {
+		rpc->fault(ctx, 500, "Internal error root reply");
+		return;
+	}
+	n = 0;
+	for(i=0; i<SR_KEMI_RUBY_EXPORT_SIZE; i++) {
+		ket = sr_kemi_ruby_export_get(i);
+		if(ket==NULL) continue;
+		n++;
+	}
+
+	if(rpc->struct_add(th, "d[",
+				"msize", n,
+				"methods",  &ih)<0)
+	{
+		rpc->fault(ctx, 500, "Internal error array structure");
+		return;
+	}
+	for(i=0; i<SR_KEMI_RUBY_EXPORT_SIZE; i++) {
+		ket = sr_kemi_ruby_export_get(i);
+		if(ket==NULL) continue;
+		if(rpc->struct_add(ih, "{", "func", &sh)<0) {
+			rpc->fault(ctx, 500, "Internal error internal structure");
+			return;
+		}
+		if(rpc->struct_add(sh, "SSSS",
+				"ret", sr_kemi_param_map_get_name(ket->rtype),
+				"module", &ket->mname,
+				"name", &ket->fname,
+				"params", sr_kemi_param_map_get_params(ket->ptypes))<0) {
+			LM_ERR("failed to add the structure with attributes (%d)\n", i);
+			rpc->fault(ctx, 500, "Internal error creating dest struct");
+			return;
+		}
+	}
+}
+
 /**
- * 
+ *
+ */
+rpc_export_t app_ruby_rpc_cmds[] = {
+	{"app_ruby.reload", app_ruby_rpc_reload,
+		app_ruby_rpc_reload_doc, 0},
+	{"app_ruby.api_list", app_ruby_rpc_api_list,
+		app_ruby_rpc_api_list_doc, 0},
+	{0, 0, 0, 0}
+};
+
+/**
+ *
  */
 int app_ruby_init_rpc(void)
 {
+	if (rpc_register_array(app_ruby_rpc_cmds)!=0) {
+		LM_ERR("failed to register RPC commands\n");
+		return -1;
+	}
 	return 0;
 }

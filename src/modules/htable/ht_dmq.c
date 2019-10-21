@@ -139,36 +139,43 @@ static int ht_dmq_cell_group_flush(dmq_node_t* node) {
 
 	srjson_doc_t *jdoc = &ht_dmq_jdoc_cell_group.jdoc;
 	srjson_t *jdoc_cells = ht_dmq_jdoc_cell_group.jdoc_cells;
+	int ret = 0;
 
 	srjson_AddItemToObject(jdoc, jdoc->root, "cells", jdoc_cells);
 
-	LM_DBG("json[%s]\n", srjson_PrintUnformatted(jdoc, jdoc->root));
+	LM_DBG("jdoc size[%d]\n", ht_dmq_jdoc_cell_group.size);
 	jdoc->buf.s = srjson_PrintUnformatted(jdoc, jdoc->root);
 	if(jdoc->buf.s==NULL) {
 		LM_ERR("unable to serialize data\n");
-		return -1;
+		ret = -1;
+		goto cleanup;
 	}
 	jdoc->buf.len = strlen(jdoc->buf.s);
 
 	LM_DBG("sending serialized data %.*s\n", jdoc->buf.len, jdoc->buf.s);
 	if (ht_dmq_send(&jdoc->buf, node)!=0) {
 		LM_ERR("unable to send data\n");
-		return -1;
+		ret = -1;
 	}
 
-	LM_DBG("jdoc size[%d]\n", ht_dmq_jdoc_cell_group.size);
+cleanup:
 
-	srjson_Delete(jdoc, jdoc_cells);
-	ht_dmq_jdoc_cell_group.jdoc_cells = srjson_CreateArray(&ht_dmq_jdoc_cell_group.jdoc);
-	if (ht_dmq_jdoc_cell_group.jdoc_cells==NULL) {
-		LM_ERR("cannot re-create json cells array! \n");
-		return -1;
-	}
-
+	srjson_DeleteItemFromObject(jdoc, jdoc->root, "cells");
 	ht_dmq_jdoc_cell_group.count = 0;
 	ht_dmq_jdoc_cell_group.size = dmq_cell_group_empty_size;
 
-	return 0;
+	if(jdoc->buf.s!=NULL) {
+		jdoc->free_fn(jdoc->buf.s);
+		jdoc->buf.s = NULL;
+	}
+
+	ht_dmq_jdoc_cell_group.jdoc_cells = srjson_CreateArray(&ht_dmq_jdoc_cell_group.jdoc);
+	if (ht_dmq_jdoc_cell_group.jdoc_cells==NULL) {
+		LM_ERR("cannot re-create json cells array! \n");
+		ret = -1;
+	}
+
+	return ret;
 }
 
 static void ht_dmq_cell_group_destroy() {
@@ -537,17 +544,16 @@ error:
 int ht_dmq_handle_sync(srjson_doc_t* jdoc) {
 	LM_DBG("handling sync\n");
 
-	srjson_t* cells;
-	srjson_t* cell;
-	srjson_t* it;
-	str htname;
-	str cname;
-	int type;
-	int_str val;
-	int expire;
-	ht_t* ht;
-	time_t now;
-
+	srjson_t* cells = NULL;
+	srjson_t* cell = NULL;
+	srjson_t* it = NULL;
+	str htname = STR_NULL;
+	str cname = STR_NULL;
+	int type = 0;
+	int_str val = {0};
+	int expire = 0;
+	ht_t* ht = NULL;
+	time_t now = 0;
 
 	cells = jdoc->root->child;
 	cell = cells->child;
@@ -576,12 +582,19 @@ int ht_dmq_handle_sync(srjson_doc_t* jdoc) {
 			}
 		}
 
-		ht = ht_get_table(&htname);
-		if(ht==NULL)
-			LM_WARN("unable to get table %.*s\n", ht->name.len, ht->name.s);
-
-		if (ht_set_cell_ex(ht, &cname, type, &val, 0, expire - now) < 0)
-			LM_WARN("unable to set cell %.*s in table %.*s\n", cname.len, cname.s, ht->name.len, ht->name.s);
+		if(htname.s!=NULL && htname.len>0 && cname.s!=NULL
+				&& cname.len>0) {
+			ht = ht_get_table(&htname);
+			if(ht==NULL) {
+				LM_WARN("unable to get table %.*s\n",
+						htname.len, (htname.s)?htname.s:"");
+			} else {
+				if (ht_set_cell_ex(ht, &cname, type, &val, 0, expire - now) < 0) {
+					LM_WARN("unable to set cell %.*s in table %.*s\n",
+							cname.len, cname.s, ht->name.len, ht->name.s);
+				}
+			}
+		}
 
 		cell = cell->next;
 	}

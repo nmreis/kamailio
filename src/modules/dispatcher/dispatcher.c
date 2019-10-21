@@ -116,6 +116,7 @@ int ds_hash_initexpire = 7200;
 int ds_hash_check_interval = 30;
 int ds_timer_mode = 0;
 int ds_attrs_none = 0;
+int ds_load_mode = 0;
 
 str ds_outbound_proxy = STR_NULL;
 
@@ -139,6 +140,9 @@ pv_spec_t ds_attrs_pv;
 str ds_event_callback = STR_NULL;
 str ds_db_extra_attrs = STR_NULL;
 param_t *ds_db_extra_attrs_list = NULL;
+
+static int ds_reload_delta = 5;
+static time_t *ds_rpc_reload_time = NULL;
 
 /** module functions */
 static int mod_init(void);
@@ -269,6 +273,8 @@ static param_export_t params[]={
 	{"event_callback",     PARAM_STR, &ds_event_callback},
 	{"ds_attrs_none",      PARAM_INT, &ds_attrs_none},
 	{"ds_db_extra_attrs",  PARAM_STR, &ds_db_extra_attrs},
+	{"ds_load_mode",       PARAM_INT, &ds_load_mode},
+	{"reload_delta",       PARAM_INT, &ds_reload_delta },
 	{0,0,0}
 };
 
@@ -341,7 +347,7 @@ static int mod_init(void)
 		ds_default_sockinfo =
 				grep_sock_info(&host, (unsigned short)port, proto);
 		if(ds_default_sockinfo == 0) {
-			LM_WARN("non-local socket <%.*s>\n", ds_default_socket.len,
+			LM_ERR("non-local socket <%.*s>\n", ds_default_socket.len,
 					ds_default_socket.s);
 			return -1;
 		}
@@ -349,7 +355,7 @@ static int mod_init(void)
 				ds_default_socket.len, ds_default_socket.s);
 	}
 
-	if(init_data() != 0)
+	if(ds_init_data() != 0)
 		return -1;
 
 	if(ds_db_url.s) {
@@ -369,7 +375,7 @@ static int mod_init(void)
 				}
 			}
 		}
-		if(init_ds_db() != 0) {
+		if(ds_init_db() != 0) {
 			LM_ERR("could not initiate a connect to the database\n");
 			return -1;
 		}
@@ -449,6 +455,14 @@ static int mod_init(void)
 		LM_ERR("invalid ds_latency_estimator_alpha must be between 0 and 1000,"
 				" using default[%.3f]\n", ds_latency_estimator_alpha);
 	}
+
+	ds_rpc_reload_time = shm_malloc(sizeof(time_t));
+	if(ds_rpc_reload_time == NULL) {
+		SHM_MEM_ERROR;
+		return -1;
+	}
+	*ds_rpc_reload_time = 0;
+
 	return 0;
 }
 
@@ -457,8 +471,6 @@ static int mod_init(void)
  */
 static int child_init(int rank)
 {
-	kam_srand((11 + rank) * getpid() * 7);
-
 	return 0;
 }
 
@@ -475,6 +487,10 @@ static void destroy(void)
 		shm_free(ds_ping_reply_codes);
 	if(ds_ping_reply_codes_cnt)
 		shm_free(ds_ping_reply_codes_cnt);
+	if(ds_rpc_reload_time!=NULL) {
+		shm_free(ds_rpc_reload_time);
+		ds_rpc_reload_time = 0;
+	}
 }
 
 #define GET_VALUE(param_name, param, i_value, s_value, value_flags)        \
@@ -632,7 +648,6 @@ static int ki_ds_select_routes_limit(sip_msg_t *msg, str *srules, str *smode,
 	int i;
 	int vret;
 	int gret;
-	int vfirst;
 	sr_xval_t nxval;
 	ds_select_state_t vstate;
 
@@ -644,7 +659,6 @@ static int ki_ds_select_routes_limit(sip_msg_t *msg, str *srules, str *smode,
 	}
 	vret = -1;
 	gret = -1;
-	vfirst = 0;
 	i = 0;
 	while(i<srules->len) {
 		vstate.setid = 0;
@@ -677,9 +691,11 @@ static int ki_ds_select_routes_limit(sip_msg_t *msg, str *srules, str *smode,
 		}
 		LM_DBG("routing with setid=%d alg=%d cnt=%d limit=0x%x (%u)\n",
 			vstate.setid, vstate.alg, vstate.cnt, vstate.limit, vstate.limit);
-		
+
 		vstate.umode = DS_SETOP_XAVP;
-		if(vfirst==0) {
+		/* if no r-uri/d-uri was set already, keep using the update mode
+		 * specified by the param, then just add to xavps list */
+		if(vstate.emode==0) {
 			switch(smode->s[0]) {
 				case '0':
 				case 'd':
@@ -700,7 +716,6 @@ static int ki_ds_select_routes_limit(sip_msg_t *msg, str *srules, str *smode,
 							smode->len, smode->s);
 					return -1;
 			}
-			vfirst = 1;
 		}
 		vret = ds_manage_routes(msg, &vstate);
 		if(vret<0) {
@@ -1372,6 +1387,19 @@ static const char *dispatcher_rpc_reload_doc[2] = {
  */
 static void dispatcher_rpc_reload(rpc_t *rpc, void *ctx)
 {
+
+	if(ds_rpc_reload_time==NULL) {
+		LM_ERR("not ready for reload\n");
+		rpc->fault(ctx, 500, "Not ready for reload");
+		return;
+	}
+	if(*ds_rpc_reload_time!=0 && *ds_rpc_reload_time > time(NULL) - ds_reload_delta) {
+		LM_ERR("ongoing reload\n");
+		rpc->fault(ctx, 500, "Ongoing reload");
+		return;
+	}
+	*ds_rpc_reload_time = time(NULL);
+
 	if(!ds_db_url.s) {
 		if(ds_load_list(dslistfile) != 0) {
 			rpc->fault(ctx, 500, "Reload Failed");
@@ -1640,6 +1668,58 @@ static void dispatcher_rpc_ping_active(rpc_t *rpc, void *ctx)
 	return;
 }
 
+static const char *dispatcher_rpc_add_doc[2] = {
+		"Add a destination address in memory", 0};
+
+
+/*
+ * RPC command to add a destination address to memory
+ */
+static void dispatcher_rpc_add(rpc_t *rpc, void *ctx)
+{
+	int group, flags;
+	str dest;
+
+	flags = 0;
+
+	if(rpc->scan(ctx, "dS*d", &group, &dest, &flags) < 2) {
+		rpc->fault(ctx, 500, "Invalid Parameters");
+		return;
+	}
+
+	if(ds_add_dst(group, &dest, flags) != 0) {
+		rpc->fault(ctx, 500, "Adding dispatcher dst failed");
+		return;
+	}
+
+	return;
+}
+
+static const char *dispatcher_rpc_remove_doc[2] = {
+		"Remove a destination address from memory", 0};
+
+
+/*
+ * RPC command to remove a destination address from memory
+ */
+static void dispatcher_rpc_remove(rpc_t *rpc, void *ctx)
+{
+	int group;
+	str dest;
+
+	if(rpc->scan(ctx, "dS", &group, &dest) < 2) {
+		rpc->fault(ctx, 500, "Invalid Parameters");
+		return;
+	}
+
+	if(ds_remove_dst(group, &dest) != 0) {
+		rpc->fault(ctx, 500, "Removing dispatcher dst failed");
+		return;
+	}
+
+	return;
+}
+
 /* clang-format off */
 rpc_export_t dispatcher_rpc_cmds[] = {
 	{"dispatcher.reload", dispatcher_rpc_reload,
@@ -1650,6 +1730,10 @@ rpc_export_t dispatcher_rpc_cmds[] = {
 		dispatcher_rpc_set_state_doc,   0},
 	{"dispatcher.ping_active",   dispatcher_rpc_ping_active,
 		dispatcher_rpc_ping_active_doc, 0},
+	{"dispatcher.add",   dispatcher_rpc_add,
+		dispatcher_rpc_add_doc, 0},
+	{"dispatcher.remove",   dispatcher_rpc_remove,
+		dispatcher_rpc_remove_doc, 0},
 	{0, 0, 0, 0}
 };
 /* clang-format on */

@@ -211,7 +211,7 @@ int fixup_regexp_null(void** param, int param_no)
 	if (param_no != 1)
 		return E_UNSPEC;
 	if ((re=pkg_malloc(sizeof(*re))) ==0) {
-		ERR("No memory left\n");
+		PKG_MEM_ERROR;
 		goto error;
 	}
 	if (regcomp(&re->regex, *param,
@@ -277,7 +277,7 @@ int fixup_pvar_all(void** param, int param_no)
 		/* not a pvs id */
 		goto error;
 	if ((pvs_f=pkg_malloc(sizeof(*pvs_f))) == 0) {
-		ERR("No memory left\n");
+		PKG_MEM_ERROR;
 		goto error;
 	}
 	if (pv_parse_spec2(&name, &pvs_f->pvs, 1) == 0)
@@ -615,6 +615,14 @@ int fixup_free_spve_all(void** param, int param_no)
 int fixup_igp_all(void** param, int param_no)
 {
 	return fixup_igp_null(param, 1);
+}
+
+/**
+ *
+ */
+int fixup_free_igp_all(void** param, int param_no)
+{
+	return fixup_free_igp_null(param, 1);
 }
 
 /**

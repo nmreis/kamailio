@@ -34,7 +34,6 @@
 
 #include "../../core/events.h"
 #include "../../core/receive.h"
-#include "../../core/stats.h"
 #include "../../core/str.h"
 #include "../../core/tcp_conn.h"
 #include "../../core/tcp_read.h"
@@ -244,7 +243,6 @@ static int encode_and_send_ws_frame(ws_frame_t *frame, conn_close_t conn_close)
 
 	if(dst.proto == PROTO_WS) {
 		if(unlikely(tcp_disable)) {
-			STATS_TX_DROPS;
 			LM_WARN("TCP disabled\n");
 			pkg_free(send_buf);
 			tcpconn_put(con);
@@ -254,7 +252,6 @@ static int encode_and_send_ws_frame(ws_frame_t *frame, conn_close_t conn_close)
 #ifdef USE_TLS
 	else if(dst.proto == PROTO_WSS) {
 		if(unlikely(tls_disable)) {
-			STATS_TX_DROPS;
 			LM_WARN("TLS disabled\n");
 			pkg_free(send_buf);
 			tcpconn_put(con);
@@ -275,7 +272,6 @@ static int encode_and_send_ws_frame(ws_frame_t *frame, conn_close_t conn_close)
 	dst.send_flags.f |= SND_F_FORCE_CON_REUSE;
 
 	if(tcp_send(&dst, from, send_buf, frame_length) < 0) {
-		STATS_TX_DROPS;
 		LM_ERR("sending WebSocket frame\n");
 		pkg_free(send_buf);
 		update_stat(ws_failed_connections, 1);
@@ -796,31 +792,45 @@ void ws_keepalive(unsigned int ticks, void *param)
 	int check_time =
 			(int)time(NULL) - cfg_get(websocket, ws_cfg, keepalive_timeout);
 
-	ws_connection_t **list = NULL, **list_head = NULL;
+	ws_connection_id_t *list_head = NULL;
 	ws_connection_t *wsc = NULL;
+	int i = 0;
+	int idx = (int)(long)param;
 
 	/* get an array of pointer to all ws connection */
-	list_head = wsconn_get_list();
+	list_head = wsconn_get_list_ids(idx);
 	if(!list_head)
 		return;
 
-	list = list_head;
-	wsc = *list_head;
-	while(wsc && wsc->last_used < check_time) {
-		if(wsc->state == WS_S_CLOSING || wsc->awaiting_pong) {
-			LM_WARN("forcibly closing connection\n");
-			wsconn_close_now(wsc);
-		} else {
-			int opcode = (ws_keepalive_mechanism == KEEPALIVE_MECHANISM_PING)
+	while(list_head[i].id!=-1) {
+		wsc = wsconn_get(list_head[i].id);
+		if(wsc && wsc->last_used < check_time) {
+			if(wsc->state == WS_S_CLOSING || wsc->awaiting_pong) {
+				LM_WARN("forcibly closing connection\n");
+				wsconn_close_now(wsc);
+			} else if (ws_keepalive_mechanism == KEEPALIVE_MECHANISM_CONCHECK) {
+				tcp_connection_t *con = tcpconn_get(wsc->id, 0, 0, 0, 0);
+				if(con==NULL) {
+					LM_INFO("tcp connection has been lost\n");
+					wsc->state = WS_S_CLOSING;
+				} else {
+					tcpconn_put(con);
+				}
+			} else {
+				int opcode = (ws_keepalive_mechanism == KEEPALIVE_MECHANISM_PING)
 								 ? OPCODE_PING
 								 : OPCODE_PONG;
-			ping_pong(wsc, opcode);
+				ping_pong(wsc, opcode);
+			}
 		}
+		if(wsc) {
+			wsconn_put_id(list_head[i].id);
+		}
+		i++;
 
-		wsc = *(++list);
 	}
 
-	wsconn_put_list(list_head);
+	wsconn_put_list_ids(list_head);
 }
 
 int ws_close(sip_msg_t *msg)
