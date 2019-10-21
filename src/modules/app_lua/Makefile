@@ -25,10 +25,10 @@ ifeq ($(LUAJIT),)
 				LUA52 = $(shell ls $(LOCALBASE)/lib/liblua* | grep liblua5.2)
 				ifneq ($(LUA52),)
 					DEFS+= -DLUA_COMPAT_MODULE -I$(LOCALBASE)/include/lua5.2
-					LIBS+= -llua5.2
+					LIBS+= -llua52
 				else
 					DEFS+= -DLUA_COMPAT_MODULE -I$(LOCALBASE)/include/lua
-					LIBS+= -llua
+					LIBS+= -llua52
 				endif
 			endif
 		else
@@ -61,10 +61,10 @@ ifeq ($(LUAJIT),)
 					LUA52 = $(shell ls /usr/lib/liblua* | grep liblua5.2)
 					ifneq ($(LUA51),)
 						DEFS+= -DLUA_COMPAT_MODULE -I/usr/include/lua5.2
-						LIBS = -llua5.2 -lm
+						LIBS = -llua52 -lm
 					else
 						DEFS+= -DLUA_COMPAT_MODULE -I/usr/include/lua
-						LIBS = -llua -lm
+						LIBS = -llua52 -lm
 					endif
 				endif
 			else
