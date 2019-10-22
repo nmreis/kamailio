@@ -174,8 +174,8 @@
 %bcond_without memcached
 %bcond_with mongodb
 %bcond_without perl
-%bcond_with phonenum
-%bcond_with python3
+%bcond_without phonenum
+%bcond_without python3
 %bcond_with rabbitmq
 %bcond_with redis
 %bcond_with ruby
@@ -227,7 +227,7 @@
 %bcond_without memcached
 %bcond_with mongodb
 %bcond_without perl
-%bcond_with phonenum
+%bcond_without phonenum
 %bcond_without python3
 %bcond_with rabbitmq
 %bcond_without redis
@@ -253,8 +253,8 @@
 %bcond_with memcached
 %bcond_with mongodb
 %bcond_with perl
-%bcond_with phonenum
-%bcond_with python3
+%bcond_without phonenum
+%bcond_without python3
 %bcond_with rabbitmq
 %bcond_with redis
 %bcond_with ruby
@@ -279,8 +279,8 @@
 %bcond_with memcached
 %bcond_without mongodb
 %bcond_without perl
-%bcond_with phonenum
-%bcond_with python3
+%bcond_without phonenum
+%bcond_without python3
 %bcond_with rabbitmq
 %bcond_without redis
 %bcond_with ruby
@@ -718,7 +718,7 @@ LDAP search interface for Kamailio.
 Summary:    Lua extensions for Kamailio
 Group:      %{PKGGROUP}
 Requires:   kamailio = %ver
-BuildRequires:  lua-devel
+BuildRequires:  lua52-devel
 
 %description    lua
 Lua extensions for Kamailio.
@@ -1756,6 +1756,7 @@ fi
 %{_libdir}/kamailio/kamctl/dbtextdb/dbtextdb.pyo
 
 %{_mandir}/man5/*
+%{_mandir}/man7/*
 %{_mandir}/man8/*
 
 %dir %{_datadir}/kamailio
