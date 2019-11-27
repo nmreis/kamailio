@@ -1,5 +1,5 @@
 %define name    kamailio
-%define ver 5.3.0
+%define ver 5.3.1
 %define rel %{wavecom}.%{timestamp}.%{gitver}%{dist}
 
 %if 0%{?fedora} == 27
@@ -332,7 +332,7 @@ Conflicts:  kamailio-carrierroute < %ver, kamailio-cpl < %ver
 Conflicts:  kamailio-dialplan < %ver, kamailio-dnssec < %ver
 Conflicts:  kamailio-geoip < %ver, kamailio-gzcompress < %ver
 Conflicts:  kamailio-ims < %ver, kamailio-java < %ver, kamailio-json < %ver
-Conflicts:  kamailio-lcr < %ver, kamailio-ldap < %ver, kamailio-lua < %ver
+Conflicts:  kamailio-lcr < %ver, kamailio-ldap < %ver, kamailio-lost < %ver, kamailio-lua < %ver
 Conflicts:  kamailio-kazoo < %ver
 Conflicts:  kamailio-rabbitmq < %ver
 Conflicts:  kamailio-memcached < %ver, kamailio-mongodb < %ver, kamailio-mysql < %ver
@@ -712,6 +712,14 @@ BuildRequires:  openldap-devel
 %description    ldap
 LDAP search interface for Kamailio.
 
+%package    lost
+Summary:    HELD (RFC6155) and LOST (RFC5222) location-based routing
+Group:      %{PKGGROUP}
+Requires:   libxml2, kamailio = %ver
+BuildRequires:  libxml2-devel
+
+%description    lost
+HELD (RFC6155) and LOST (RFC5222) location-based routing support for Kamailio.
 
 %if %{with lua}
 %package    lua
@@ -1499,7 +1507,6 @@ fi
 %doc %{_docdir}/kamailio/modules/README.ipops
 %doc %{_docdir}/kamailio/modules/README.kemix
 %doc %{_docdir}/kamailio/modules/README.kex
-%doc %{_docdir}/kamailio/modules/README.lost
 %doc %{_docdir}/kamailio/modules/README.malloc_test
 %doc %{_docdir}/kamailio/modules/README.mangler
 %doc %{_docdir}/kamailio/modules/README.matrix
@@ -1653,7 +1660,6 @@ fi
 %{_libdir}/kamailio/modules/ipops.so
 %{_libdir}/kamailio/modules/kemix.so
 %{_libdir}/kamailio/modules/kex.so
-%{_libdir}/kamailio/modules/lost.so
 %{_libdir}/kamailio/modules/malloc_test.so
 %{_libdir}/kamailio/modules/mangler.so
 %{_libdir}/kamailio/modules/matrix.so
@@ -1954,6 +1960,11 @@ fi
 %{_libdir}/kamailio/modules/db2_ldap.so
 %{_libdir}/kamailio/modules/h350.so
 %{_libdir}/kamailio/modules/ldap.so
+
+%files      lost
+%defattr(-,root,root)
+%doc %{_docdir}/kamailio/modules/README.lost
+%{_libdir}/kamailio/modules/lost.so
 
 
 %if %{with lua}
