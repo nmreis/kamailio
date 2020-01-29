@@ -344,10 +344,15 @@ modparam("dispatcher", "force_dst", 1)
 			sock - the socket pointer.
 			</listitem>
 			<listitem>
+			socket - the socket string - it is added only if xavp_dst_mode has bit 2 set
+			(value 2).
+			</listitem>
+			<listitem>
 			dstid - the destination unique id (in case of call load distribution algorithm).
 			</listitem>
 			<listitem>
-			attrs - the attributes - they are added if xavp_dst_mode does not have the bit 1 set.
+			attrs - the attributes - they are added if xavp_dst_mode does not have
+			the bit 1 set (value 1).
 			</listitem>
 		</itemizedlist>
  		</para>
@@ -358,11 +363,13 @@ modparam("dispatcher", "force_dst", 1)
  		</para>
  		<example>
  		<title>Set the <quote>xavp_dst_mode</quote> parameter</title>
- <programlisting format="linespecific">
- ...
- modparam("dispatcher", "xavp_dst_mode", 1)
- ...
- </programlisting>
+<programlisting format="linespecific">
+...
+    modparam("dispatcher", "xavp_dst_mode", 1)
+...
+    modparam("dispatcher", "xavp_dst_mode", 2)
+...
+</programlisting>
  		</example>
  	</section>
  	<section id="dispatcher.p.xavp_ctx">
@@ -644,8 +651,8 @@ modparam("dispatcher", "force_dst", 1)
 			but you can skip some servers with flag 4 in destination list file, for example.</para>
 		</listitem>
 		<listitem>
-			<para>Value 2: if set to 2, only gateways in inactive state with
-			probing mode set are tested.</para>
+			<para>Value 2: if set to 2, only gateways in INACTIVE state with
+			PROBING mode set are tested.</para>
 		</listitem>
 		<listitem>
 			<para>Value 3: If set to 3, any gateway with state PROBING is continually probed

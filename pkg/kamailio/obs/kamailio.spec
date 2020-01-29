@@ -1,137 +1,13 @@
 %define name    kamailio
-%define ver 5.3.1
+%define ver 5.3.2
 %define rel dev1.0%{dist}
 
-%if 0%{?fedora} == 27
+%if 0%{?fedora}
 %define dist_name fedora
 %define dist_version %{?fedora}
 %bcond_without cnxcc
 %bcond_with dnssec
-%bcond_without geoip
-%bcond_without http_async_client
-%bcond_without ims
-%bcond_without jansson
-%bcond_without json
-%bcond_without lua
-%bcond_without kazoo
-%bcond_without memcached
-%bcond_without mongodb
-%bcond_without perl
-%bcond_without phonenum
-%bcond_without python3
-%bcond_without rabbitmq
-%bcond_without redis
-%bcond_without ruby
-%bcond_without sctp
-%bcond_without websocket
-%bcond_without xmlrpc
-%endif
-
-%if 0%{?fedora} == 28
-%define dist_name fedora
-%define dist_version %{?fedora}
-%bcond_without cnxcc
-%bcond_with dnssec
-%bcond_without geoip
-%bcond_without http_async_client
-%bcond_without ims
-%bcond_without jansson
-%bcond_without json
-%bcond_without lua
-%bcond_without kazoo
-%bcond_without memcached
-%bcond_without mongodb
-%bcond_without perl
-%bcond_without phonenum
-%bcond_without python3
-%bcond_without rabbitmq
-%bcond_without redis
-%bcond_without ruby
-%bcond_without sctp
-%bcond_without websocket
-%bcond_without xmlrpc
-%endif
-
-%if 0%{?fedora} == 29
-%define dist_name fedora
-%define dist_version %{?fedora}
-%bcond_without cnxcc
-%bcond_with dnssec
-%bcond_without geoip
-%bcond_without http_async_client
-%bcond_without ims
-%bcond_without jansson
-%bcond_without json
-%bcond_without lua
-%bcond_without kazoo
-%bcond_without memcached
-%bcond_without mongodb
-%bcond_without perl
-%bcond_without phonenum
-%bcond_without python3
-%bcond_without rabbitmq
-%bcond_without redis
-%bcond_without ruby
-%bcond_without sctp
-%bcond_without websocket
-%bcond_without xmlrpc
-%endif
-
-%if 0%{?fedora} == 30
-%define dist_name fedora
-%define dist_version %{?fedora}
-%bcond_without cnxcc
-%bcond_with dnssec
-%bcond_without geoip
-%bcond_without http_async_client
-%bcond_without ims
-%bcond_without jansson
-%bcond_without json
-%bcond_without lua
-%bcond_without kazoo
-%bcond_without memcached
-%bcond_without mongodb
-%bcond_without perl
-%bcond_without phonenum
-%bcond_without python3
-%bcond_without rabbitmq
-%bcond_without redis
-%bcond_without ruby
-%bcond_without sctp
-%bcond_without websocket
-%bcond_without xmlrpc
-%endif
-
-%if 0%{?fedora} == 31
-%define dist_name fedora
-%define dist_version %{?fedora}
-%bcond_without cnxcc
-%bcond_with dnssec
-%bcond_without geoip
-%bcond_without http_async_client
-%bcond_without ims
-%bcond_without jansson
-%bcond_without json
-%bcond_without lua
-%bcond_without kazoo
-%bcond_without memcached
-%bcond_without mongodb
-%bcond_without perl
-%bcond_without phonenum
-%bcond_without python3
-%bcond_without rabbitmq
-%bcond_without redis
-%bcond_without ruby
-%bcond_without sctp
-%bcond_without websocket
-%bcond_without xmlrpc
-%endif
-
-%if 0%{?fedora} == 99
-%define dist_name fedora
-%define dist_version %{?fedora}
-%bcond_without cnxcc
-%bcond_with dnssec
+%bcond_without evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -157,6 +33,7 @@
 %define dist_version %{?centos}
 %bcond_with cnxcc
 %bcond_without dnssec
+%bcond_without evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -183,6 +60,7 @@
 %define dist .el7.centos
 %bcond_without cnxcc
 %bcond_with dnssec
+%bcond_without evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -209,7 +87,8 @@
 %define dist .el8.centos
 %bcond_without cnxcc
 %bcond_with dnssec
-%bcond_with geoip
+%bcond_without evapi
+%bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
 %bcond_without jansson
@@ -219,7 +98,7 @@
 %bcond_without memcached
 %bcond_without mongodb
 %bcond_without perl
-%bcond_with phonenum
+%bcond_without phonenum
 %bcond_without python3
 %bcond_without rabbitmq
 %bcond_without redis
@@ -234,6 +113,7 @@
 %define dist_version %{?suse_version}
 %bcond_without cnxcc
 %bcond_with dnssec
+%bcond_with evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -259,6 +139,7 @@
 %define dist_version %{?rhel}
 %bcond_with cnxcc
 %bcond_without dnssec
+%bcond_without evapi
 %bcond_with geoip
 %bcond_with http_async_client
 %bcond_with ims
@@ -284,6 +165,7 @@
 %define dist_version %{?rhel}
 %bcond_without cnxcc
 %bcond_with dnssec
+%bcond_without evapi
 %bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
@@ -309,7 +191,8 @@
 %define dist_version %{?rhel}
 %bcond_without cnxcc
 %bcond_with dnssec
-%bcond_with geoip
+%bcond_without evapi
+%bcond_without geoip
 %bcond_without http_async_client
 %bcond_without ims
 %bcond_without jansson
@@ -319,7 +202,7 @@
 %bcond_without memcached
 %bcond_without mongodb
 %bcond_without perl
-%bcond_with phonenum
+%bcond_without phonenum
 %bcond_without python3
 %bcond_without rabbitmq
 %bcond_without redis
@@ -566,6 +449,21 @@ BuildRequires:  dnssec-tools-libs-devel
 
 %description    dnssec
 DNSSEC support for Kamailio.
+%endif
+
+
+%if %{with evapi}
+%package    evapi
+Summary:    Module can be used to create an event message flow from Kamailio to any application that can connect to a TCP socket
+Group:      %{PKGGROUP}
+Requires:   libev, kamailio = %ver
+BuildRequires:  libev-devel
+
+%description    evapi
+The remote application can also issue messages received by Kamailio.
+There is no protocol definition, it is all up to the author of the routing script.
+Events can be generated for any event in Kamailio. For 3rd party transaction control, a transaction can be automatically
+suspended when sending the event, to be resumed at a later point, maybe triggered by an incoming message on the event socket.
 %endif
 
 
@@ -1237,6 +1135,9 @@ make every-module skip_modules="app_mono db_cassandra db_oracle iptrtpproxy \
 %if %{with dnssec}
     kdnssec \
 %endif
+%if %{with evapi}
+    kev \
+%endif
 %if %{with geoip}
     kgeoip \
 %endif
@@ -1320,6 +1221,9 @@ make install-modules-all skip_modules="app_mono db_cassandra db_oracle \
     kcpl \
 %if %{with dnssec}
     kdnssec \
+%endif
+%if %{with evapi}
+    kev \
 %endif
 %if %{with geoip}
     kgeoip \
@@ -1855,6 +1759,14 @@ fi
 %defattr(-,root,root)
 %doc %{_docdir}/kamailio/modules/README.dnssec
 %{_libdir}/kamailio/modules/dnssec.so
+%endif
+
+
+%if %{with evapi}
+%files      evapi
+%defattr(-,root,root)
+%doc %{_docdir}/kamailio/modules/README.evapi
+%{_libdir}/kamailio/modules/evapi.so
 %endif
 
 

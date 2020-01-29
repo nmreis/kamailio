@@ -1048,7 +1048,7 @@ static int ki_t_check_status(sip_msg_t* msg, str *sexp)
 {
 	regmatch_t pmatch;
 	struct cell *t;
-	char *status, *s = NULL;
+	char *status = NULL;
 	char backup;
 	int lowest_status, n, ret;
 	regex_t re;
@@ -1065,7 +1065,7 @@ static int ki_t_check_status(sip_msg_t* msg, str *sexp)
 
 	memset(&re, 0, sizeof(regex_t));
 	if (regcomp(&re, sexp->s, REG_EXTENDED|REG_ICASE|REG_NEWLINE)) {
-		LM_ERR("Bad regular expression '%s'\n", s);
+		LM_ERR("Bad regular expression '%s'\n", sexp->s);
 		goto error0;
 	}
 
@@ -2902,6 +2902,7 @@ static int ki_t_relay_to_flags(sip_msg_t *msg, int rflags)
 /**
  *
  */
+/* clang-format off */
 static sr_kemi_t tm_kemi_exports[] = {
 	{ str_init("tm"), str_init("t_relay"),
 		SR_KEMIP_INT, ki_t_relay,
@@ -3151,7 +3152,7 @@ static sr_kemi_t tm_kemi_exports[] = {
 
 	{ {0, 0}, {0, 0}, 0, NULL, { 0, 0, 0, 0, 0, 0 } }
 };
-
+/* clang-format on */
 
 int mod_register(char *path, int *dlflags, void *p1, void *p2)
 {

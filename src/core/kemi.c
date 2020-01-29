@@ -148,8 +148,12 @@ static int sr_kemi_core_log(sip_msg_t *msg, str *level, str *txt)
 				LM_DBG("%s", txt->s);
 			} else if(strcasecmp(level->s, "info")==0) {
 				LM_INFO("%s", txt->s);
+			} else if(strcasecmp(level->s, "notice")==0) {
+				LM_NOTICE("%s", txt->s);
 			} else if(strcasecmp(level->s, "warn")==0) {
 				LM_WARN("%s", txt->s);
+			} else if(strcasecmp(level->s, "err")==0) {
+				LM_ERR("%s", txt->s);
 			} else if(strcasecmp(level->s, "crit")==0) {
 				LM_CRIT("%s", txt->s);
 			} else {
@@ -839,6 +843,12 @@ static int sr_kemi_core_is_method_in(sip_msg_t *msg, str *vmethod)
 					return SR_KEMI_TRUE;
 				}
 			break;
+			case 'F':
+			case 'f':
+				if(imethod==METHOD_REFER) {
+					return SR_KEMI_TRUE;
+				}
+			break;
 			case 'G':
 			case 'g':
 				if(imethod==METHOD_GET) {
@@ -989,6 +999,14 @@ static int sr_kemi_core_is_method_publish(sip_msg_t *msg)
 static int sr_kemi_core_is_method_notify(sip_msg_t *msg)
 {
 	return sr_kemi_core_is_method_type(msg, METHOD_NOTIFY);
+}
+
+/**
+ *
+ */
+static int sr_kemi_core_is_method_refer(sip_msg_t *msg)
+{
+	return sr_kemi_core_is_method_type(msg, METHOD_REFER);
 }
 
 /**
@@ -1604,6 +1622,11 @@ static sr_kemi_t _sr_kemi_core[] = {
 	},
 	{ str_init(""), str_init("is_NOTIFY"),
 		SR_KEMIP_BOOL, sr_kemi_core_is_method_notify,
+		{ SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE,
+			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }
+	},
+	{ str_init(""), str_init("is_REFER"),
+		SR_KEMIP_BOOL, sr_kemi_core_is_method_refer,
 		{ SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE,
 			SR_KEMIP_NONE, SR_KEMIP_NONE, SR_KEMIP_NONE }
 	},
